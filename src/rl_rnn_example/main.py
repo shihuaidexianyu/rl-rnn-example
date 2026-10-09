@@ -13,7 +13,6 @@ from .metrics import evaluate
 from .rw import RWModel
 from .training import fit_gru, fit_rw, split_blocks
 
-
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_DIR / "data"
 
