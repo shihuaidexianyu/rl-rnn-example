@@ -6,7 +6,11 @@ dist/
 wheels/
 *.egg-info
 
+# macos
+.DS_Store
+
 # Virtual environments
 .venv
-# 实际的数据不上传
+
+# training data
 data/

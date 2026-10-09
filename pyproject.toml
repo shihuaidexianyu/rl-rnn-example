@@ -1,13 +1,17 @@
 [project]
 name = "rl-rnn-example"
 version = "0.1.0"
-description = "Add your description here"
+description = "猴子反转学习的 RW 与 GRU 学习框架"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "numpy>=2.5.3",
+    "scipy>=1.18.1",
+    "torch>=2.14.1",
+]
 
 [project.scripts]
-rl-rnn-example = "rl_rnn_example:main"
+rl-rnn-example = "rl_rnn_example.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]

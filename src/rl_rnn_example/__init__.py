@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from rl-rnn-example!")
+"""猴子反转学习的手写代码框架。"""
