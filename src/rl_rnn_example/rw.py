@@ -16,16 +16,12 @@ class RWModel:
     """
 
     def __init__(self, alpha: float = 0.5, iTemp: float = 5.0):
-        if not (0 <= alpha <= 1):
-            raise ValueError("alpha 必须在 0–1 之间。")
-        if iTemp <= 0:
-            raise ValueError("iTemp 必须为正数。")
         self.alpha = alpha
         self.iTemp = iTemp
 
     def choice_probabilities(self, values: np.ndarray) -> np.ndarray:
         """输入形状为 (2,) 的 Q 值，返回形状为 (2,) 的选择概率。"""
-        # TODO：计算 softmax(iTemp * values)。
+        # 计算 softmax(iTemp * values)。
         # 先减去最大分数再取指数，可以避免数值溢出。
         # 返回顺序固定为 [P(action=0), P(action=1)]，两项之和为 1。
         values = np.array(values, dtype=float)
@@ -36,9 +32,9 @@ class RWModel:
 
     def update_values(self, values: np.ndarray, action: int, reward: int) -> np.ndarray:
         """返回更新后的 Q 值，形状为 (2,)，保持传入的 values 不变。"""
-        # TODO 1：复制旧 values，以免修改已保存的历史状态。
+        # 复制旧 values，以免修改已保存的历史状态。
         new_values = values.copy()
-        # TODO 2：只更新本次选择的选项：Q新 = Q旧 + alpha * (reward - Q旧)。
+        # 只更新本次选择的选项：Q新 = Q旧 + alpha * (reward - Q旧)。
         new_values[action] += self.alpha * (reward - new_values[action])
         # 未选择的选项保持不变；不要根据反转标记直接重置 Q 值。
         return new_values
@@ -55,22 +51,17 @@ class RWModel:
         即先预测 actions[t]，再读取 actions[t]、rewards[t] 更新价值。
         返回 T 行，不包含读完最后一次事件后的额外状态。
         """
-        # TODO 1：检查输入等长且非空。
-        if len(actions) != len(rewards):
-            raise ValueError("actions 和 rewards 长度必须相同。")
-        if len(actions) == 0:
-            raise ValueError("actions 和 rewards 不能为空。")
-        # TODO 2：每次调用都从 Q=[0, 0] 开始，不继承上一个 block 的状态。
+        # 每次调用都从 Q=[0, 0] 开始，不继承上一个 block 的状态。
         values = np.array([0.0, 0.0], dtype=float)
         probabilities = []
         states = []
         for t in range(len(actions)):
-            # TODO 3：逐次保存当前 Q 和 choice_probabilities(Q)。
+            # 逐次保存当前 Q 和 choice_probabilities(Q)。
             states.append(values.copy())
             probabilities.append(self.choice_probabilities(values))
-            # TODO 4：使用真实动作和奖励调用 update_values，进入下一次试次。
+            # 使用真实动作和奖励调用 update_values，进入下一次试次。
             values = self.update_values(values, actions[t], rewards[t])
-        # TODO 5：返回包含 probabilities、states 的字典。
+        # 返回包含 probabilities、states 的字典。
         return {
             "probabilities": np.array(probabilities),
             "states": np.array(states),

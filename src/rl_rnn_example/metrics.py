@@ -13,19 +13,19 @@ def negative_log_likelihood(probabilities: np.ndarray, actions: np.ndarray) -> f
     probabilities 的形状为 (T, 2)，actions 的形状为 (T,)。
     每次损失为 -ln(P(真实选择))，最后对 T 次试次取平均。
     """
-    # TODO 1：取出每行中真实动作对应的概率。
+    # 取出每行中真实动作对应的概率。
     true_probs = probabilities[np.arange(len(actions)), actions]
-    # TODO 2：给概率设置很小的正数下界，避免计算 log(0)。
+    # 给概率设置很小的正数下界，避免计算 log(0)。
     true_probs = np.clip(true_probs, a_min=1e-10, a_max=None)
-    # TODO 3：计算负的自然对数，并返回平均值。
+    # 计算负的自然对数，并返回平均值。
     return -np.mean(np.log(true_probs))
 
 
 def accuracy(probabilities: np.ndarray, actions: np.ndarray) -> float:
     """返回预测准确率，范围为 0–1。"""
-    # TODO 1：每行取概率较大的动作编号；平局时统一选择编号 0。
+    # 每行取概率较大的动作编号；平局时统一选择编号 0。
     predicted_actions = np.argmax(probabilities, axis=1)
-    # TODO 2：与真实 actions 比较，计算相同的比例。
+    # 与真实 actions 比较，计算相同的比例。
     return np.mean(predicted_actions == actions)
 
 
@@ -35,9 +35,7 @@ def evaluate(model, blocks: list[dict]) -> dict:
     model 可以是 RWModel 或 GRUModel，均提供 predict_block 方法。
     返回字典包含 n_trials（总试次数）、nll（平均损失）、accuracy（准确率）。
     """
-    if not blocks:
-        raise ValueError("blocks 不能为空。")
-    # TODO 1：逐个 block 调用 model.predict_block(actions, rewards)。
+    # 逐个 block 调用 model.predict_block(actions, rewards)。
     all_nll = []
     all_accuracy = []
     total_trials = 0
@@ -46,10 +44,10 @@ def evaluate(model, blocks: list[dict]) -> dict:
         rewards = block["rewards"]
         result = model.predict_block(actions, rewards)
         probabilities = result["probabilities"]
-        # TODO 2：使用上面的两个函数计算每个 block 的表现。
+        # 使用上面的两个函数计算每个 block 的表现。
         nll = negative_log_likelihood(probabilities, actions)
         acc = accuracy(probabilities, actions)
-        # TODO 3：按试次数加权汇总，返回所有试次上的平均指标。
+        # 按试次数加权汇总，返回所有试次上的平均指标。
         # 不要把 block 首尾拼接后预测，否则会让记忆跨越 block 边界。
         all_nll.append(nll * len(actions))
         all_accuracy.append(acc * len(actions))

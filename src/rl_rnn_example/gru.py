@@ -16,10 +16,10 @@ class GRUModel(nn.Module):
     def __init__(self, hidden_dim: int = 2):
         super().__init__()
         self.hidden_dim = hidden_dim
-        # TODO 1：创建 GRU 层，输入维度为 2，隐藏维度为 hidden_dim。
+        # 创建 GRU 层，输入维度为 2，隐藏维度为 hidden_dim。
         # 可以使用 nn.GRU；整个项目统一采用时间在前的维度顺序 (T, B, 特征数)。
         self.gru = nn.GRU(input_size=2, hidden_size=hidden_dim, batch_first=False)
-        # TODO 2：创建线性输出层，把 hidden_dim 个状态映射为 2 个动作分数。
+        # 创建线性输出层，把 hidden_dim 个状态映射为 2 个动作分数。
         # 初始隐藏状态固定为零，不定义成需要拟合的参数。
         self.linear = nn.Linear(hidden_dim, 2)
         self.h0 = None
@@ -35,16 +35,16 @@ class GRUModel(nn.Module):
 
         第 t 行输出只能使用第 t 次之前的信息，不能先读 inputs[t] 再预测 actions[t]。
         """
-        # TODO 1：为每个 block 建立独立的零初始状态，设备和类型与 inputs 一致。
+        # 为每个 block 建立独立的零初始状态，设备和类型与 inputs 一致。
         self.h0 = torch.zeros(
             1, inputs.size(1), self.hidden_dim, device=inputs.device, dtype=inputs.dtype
         )
-        # TODO 2：运行 GRU，得到逐次读取输入后的状态。
+        # 运行 GRU，得到逐次读取输入后的状态。
         states, _ = self.gru(inputs, self.h0)
-        # TODO 3：在状态序列开头放入初始零状态，去掉最后一个更新后的状态。
+        # 在状态序列开头放入初始零状态，去掉最后一个更新后的状态。
         # 这样第一条预测使用 h0，第二条预测使用读完第一条输入后的 h1。
         states = torch.cat([self.h0, states[:-1]], dim=0)
-        # TODO 4：用输出层将对齐后的 states 转换成 logits，返回字典。
+        # 用输出层将对齐后的 states 转换成 logits，返回字典。
         # 训练时不要在这里转成 NumPy 或 detach，否则会断开梯度。
         # CrossEntropyLoss 直接接收 logits，不要提前对它执行 softmax。
         logits = self.linear(states)
@@ -57,20 +57,20 @@ class GRUModel(nn.Module):
         返回：NumPy 格式的 probabilities (T, 2) 和 states (T, hidden_dim)。
         states[t] 表示读取本次事件之前的隐藏状态，不直接等同于动作价值。
         """
-        # TODO 1：将动作和奖励组成 (T, 1, 2) 的浮点 Tensor。
+        # 将动作和奖励组成 (T, 1, 2) 的浮点 Tensor。
         # Tensor 的 dtype 和 device 与模型参数一致，避免 NumPy 默认的 float64 类型不匹配。
         inputs = torch.tensor(
             np.stack([actions, rewards], axis=-1), dtype=torch.float32
         ).unsqueeze(1)  # (T, 1, 2)
-        # TODO 2：切换到评估模式，在 torch.no_grad() 中调用 forward。
+        # 切换到评估模式，在 torch.no_grad() 中调用 forward。
         self.eval()
         with torch.no_grad():
             result = self.forward(inputs)
         logits = result["logits"]
         states = result["states"]
-        # TODO 3：对 logits 的最后一维执行 softmax，得到两个动作的概率。
+        # 对 logits 的最后一维执行 softmax，得到两个动作的概率。
         probabilities = torch.softmax(logits, dim=-1)
-        # TODO 4：去掉大小为 1 的 block 维，再转到 CPU 并转换为 NumPy。
+        # 去掉大小为 1 的 block 维，再转到 CPU 并转换为 NumPy。
         # 这个方法用于评估；训练必须调用 forward，以保留梯度。
         probabilities = probabilities.squeeze(1).cpu().numpy()
         states = states.squeeze(1).cpu().numpy()
