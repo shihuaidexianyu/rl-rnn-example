@@ -32,7 +32,7 @@ def split_blocks(
     n_validation = int(n_blocks * validation_fraction)
     n_test = int(n_blocks * test_fraction)
     n_train = n_blocks - n_validation - n_test
-
+    # 例如n_blocks = 5,则indices = [0, 1, 2, 3, 4]，打乱后可能变成 [2, 0, 4, 1, 3]。
     indices = np.arange(n_blocks)
     rng.shuffle(indices)
 
@@ -115,6 +115,8 @@ def fit_gru(
     # inputs 的 dtype 和 device 与模型参数一致，targets 使用 torch.long 且在同一设备。
     # targets 存放整数动作编号；保留块内时间顺序，验证数据也按相同方式整理。
     # 当前所有 block 等长且有效，第一版不需要加入填充和 mask 接口。
+
+    # 这里是为了确定参数所在的设备和数据类型，以便后续创建张量时保持一致。
     param = next(model.parameters())
     device, dtype = param.device, param.dtype
 

@@ -14,6 +14,7 @@ def negative_log_likelihood(probabilities: np.ndarray, actions: np.ndarray) -> f
     每次损失为 -ln(P(真实选择))，最后对 T 次试次取平均。
     """
     # 取出每行中真实动作对应的概率。
+    # 形状为 (T,)，每个元素是对应试次的真实动作概率。
     true_probs = probabilities[np.arange(len(actions)), actions]
     # 给概率设置很小的正数下界，避免计算 log(0)。
     true_probs = np.clip(true_probs, a_min=1e-10, a_max=None)
@@ -24,6 +25,7 @@ def negative_log_likelihood(probabilities: np.ndarray, actions: np.ndarray) -> f
 def accuracy(probabilities: np.ndarray, actions: np.ndarray) -> float:
     """返回预测准确率，范围为 0–1。"""
     # 每行取概率较大的动作编号；平局时统一选择编号 0。
+    # 这里是一个贪心策略，直接选择概率最大的动作。
     predicted_actions = np.argmax(probabilities, axis=1)
     # 与真实 actions 比较，计算相同的比例。
     return np.mean(predicted_actions == actions)
