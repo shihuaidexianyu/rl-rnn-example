@@ -96,10 +96,6 @@ class GRUModel(nn.Module):
         避免 forward 中的零初始化和预测前状态对齐。
         """
         state = np.asarray(state)
-        if state.shape != (self.hidden_dim,):
-            raise ValueError("隐藏状态的长度必须等于 hidden_dim。")
-        if action not in (0, 1) or reward not in (0, 1):
-            raise ValueError("动作和奖励只能是 0 或 1。")
         parameter = next(self.parameters())
         hidden = torch.tensor(state, dtype=parameter.dtype, device=parameter.device)
         hidden = hidden.reshape(1, 1, self.hidden_dim)
@@ -112,10 +108,8 @@ class GRUModel(nn.Module):
         return next_hidden[0, 0].cpu().numpy()
 
     def choice_probabilities(self, state: np.ndarray) -> np.ndarray:
-        """把指定隐藏状态转换为两个动作的概率，用于状态平面的背景色。"""
+        """把指定隐藏状态转换为两个动作的概率，用于核对读出与决策边界。"""
         state = np.asarray(state)
-        if state.shape != (self.hidden_dim,):
-            raise ValueError("隐藏状态的长度必须等于 hidden_dim。")
         parameter = next(self.parameters())
         hidden = torch.tensor(state, dtype=parameter.dtype, device=parameter.device)
         with torch.no_grad():

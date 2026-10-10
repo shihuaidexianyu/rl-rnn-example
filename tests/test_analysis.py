@@ -11,6 +11,7 @@ import torch
 from rl_rnn_example.analysis import (
     collect_predictions,
     compute_vector_field,
+    get_readout,
     load_results,
     save_results,
 )
@@ -116,17 +117,124 @@ class AnalysisTests(unittest.TestCase):
     def test_rw_vector_field_matches_update_formula(self):
         model = RWModel(alpha=0.25, iTemp=3)
         field = compute_vector_field(model, np.array([[0.1, 0.2], [0.8, 0.9]]), 4, (0, 1))
+        expected_maxima = []
         for condition in field["conditions"]:
             if condition["action"] == 0:
                 expected_dx = 0.25 * (condition["reward"] - field["x"])
                 np.testing.assert_allclose(condition["dx"], expected_dx)
                 np.testing.assert_array_equal(condition["dy"], 0)
+                chosen_values = field["x"]
             else:
                 expected_dy = 0.25 * (condition["reward"] - field["y"])
                 np.testing.assert_array_equal(condition["dx"], 0)
                 np.testing.assert_allclose(condition["dy"], expected_dy)
+                chosen_values = field["y"]
+            # RW 只移动一个坐标，因此欧氏距离就是 alpha × 绝对预测误差。
+            expected_speed = model.alpha * np.abs(condition["reward"] - chosen_values)
+            np.testing.assert_allclose(condition["speed"], expected_speed)
+            expected_maxima.append(float(expected_speed.max()))
+            self.assertEqual(condition["observed_states"].shape, (0, 2))
+            self.assertEqual(condition["observed_changes"].shape, (0, 2))
+        # 四个条件共用最大更新幅度，不能在各面板内分别归一化颜色。
+        self.assertAlmostEqual(field["speed_max"], max(expected_maxima))
+        self.assertFalse(field["has_observed_events"])
+        np.testing.assert_array_equal(field["readout_vector"], [3, -3])
+        self.assertEqual(field["readout_bias"], 0)
         expected_probability = 1 / (1 + np.exp(3 * (field["y"] - field["x"])))
         np.testing.assert_allclose(field["probability"], expected_probability)
+
+    def test_readout_direction_and_boundary_match_choice_probability(self):
+        # 特意设置非对角权重及非零偏置，避免只检验特殊的 h1-h2 读出。
+        gru_model = GRUModel().double()
+        with torch.no_grad():
+            gru_model.linear.weight.copy_(
+                torch.tensor([[1.7, -0.3], [-0.4, 0.9]], dtype=torch.float64)
+            )
+            gru_model.linear.bias.copy_(torch.tensor([0.35, -0.15], dtype=torch.float64))
+        examples = [
+            ("RW", RWModel(iTemp=2.5), np.array([2.5, -2.5]), 0.0),
+            ("GRU", gru_model, np.array([2.1, -1.2]), 0.5),
+        ]
+        for name, model, expected_weights, expected_bias in examples:
+            with self.subTest(model=name):
+                weights, bias = get_readout(model)
+                np.testing.assert_allclose(weights, expected_weights)
+                self.assertAlmostEqual(bias, expected_bias)
+                for state in (np.array([0.2, 0.7]), np.array([0.8, -0.3])):
+                    expected_probability = 1 / (1 + np.exp(-(weights @ state + bias)))
+                    self.assertAlmostEqual(
+                        model.choice_probabilities(state)[0], expected_probability, places=12
+                    )
+
+                # 求边界上离原点最近的点，并沿边界方向再取两个不同的点。
+                # 边界上的概率都应为 0.5，沿读出方向移动则偏向动作 0。
+                boundary_center = -bias * weights / (weights @ weights)
+                readout_direction = weights / np.linalg.norm(weights)
+                boundary_direction = np.array([-weights[1], weights[0]])
+                boundary_direction /= np.linalg.norm(boundary_direction)
+                for offset in (-0.3, 0.0, 0.3):
+                    boundary_state = boundary_center + offset * boundary_direction
+                    self.assertAlmostEqual(
+                        model.choice_probabilities(boundary_state)[0], 0.5, places=12
+                    )
+                    self.assertGreater(
+                        model.choice_probabilities(boundary_state + 0.2 * readout_direction)[0],
+                        0.5,
+                    )
+                    self.assertLess(
+                        model.choice_probabilities(boundary_state - 0.2 * readout_direction)[0],
+                        0.5,
+                    )
+
+    def test_observed_arrows_follow_the_corresponding_events(self):
+        # 四种条件交错出现，并重复部分条件，检验筛选时保留正确的时间顺序。
+        actions = np.array([0, 1, 0, 0, 1, 1])
+        rewards = np.array([1, 0, 0, 1, 1, 0])
+        expected_indices = {(0, 0): [2], (0, 1): [0, 3], (1, 0): [1, 5], (1, 1): [4]}
+        for name, model in self.models.items():
+            with self.subTest(model=name):
+                prediction = model.predict_block(actions, rewards)
+                states = np.vstack([prediction["states"], prediction["final_state"]])
+                field = compute_vector_field(
+                    model, states, grid_size=3, actions=actions, rewards=rewards
+                )
+                self.assertTrue(field["has_observed_events"])
+                observed_count = 0
+                for condition in field["conditions"]:
+                    indices = expected_indices[(condition["action"], condition["reward"])]
+                    np.testing.assert_allclose(condition["observed_states"], states[indices])
+                    observed_count += len(condition["observed_states"])
+                    for arrow_index, trial_index in enumerate(indices):
+                        arrow_start = condition["observed_states"][arrow_index]
+                        arrow_end = arrow_start + condition["observed_changes"][arrow_index]
+                        # 箭头终点既要接到真实序列的下一状态，也要等于同一事件的单步更新。
+                        np.testing.assert_allclose(arrow_end, states[trial_index + 1], atol=1e-7)
+                        np.testing.assert_allclose(
+                            arrow_end,
+                            model.update_state(arrow_start, actions[trial_index], rewards[trial_index]),
+                            atol=1e-7,
+                        )
+                self.assertEqual(observed_count, len(actions))
+
+    def test_vector_field_rejects_misaligned_events_and_non_2d_models(self):
+        states = np.zeros((5, 2))
+        actions = self.block["actions"]
+        rewards = self.block["rewards"]
+        invalid_events = [
+            {"actions": actions},
+            {"rewards": rewards},
+            {"actions": actions[:-1], "rewards": rewards},
+            {"actions": actions, "rewards": rewards[:-1]},
+            {"actions": actions[:, None], "rewards": rewards},
+        ]
+        for events in invalid_events:
+            with self.subTest(events=events), self.assertRaises(ValueError):
+                compute_vector_field(self.models["RW"], states, grid_size=3, **events)
+        for hidden_dim in (1, 3):
+            with self.subTest(hidden_dim=hidden_dim), self.assertRaises(ValueError):
+                compute_vector_field(GRUModel(hidden_dim), np.zeros((5, hidden_dim)), 3)
+        with self.assertRaises(ValueError):
+            compute_vector_field(GRUModel(hidden_dim=3), states, grid_size=3)
 
     def test_saved_models_reproduce_predictions_and_dynamics(self):
         # 同时验证非默认 float64 参数能被单步接口和重载流程正确处理。

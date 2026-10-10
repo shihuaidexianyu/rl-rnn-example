@@ -47,14 +47,13 @@ OUTPUT_DIR = PROJECT_DIR / "results" / f"monkey_{ANIMAL_NAME}_seed{SEED}"
 
 # 固定展示测试集中的第几个 block，不按模型表现挑选例子。
 PLOT_BLOCK_INDEX = 0
-GRID_SIZE = 13
+# 网格用于计算背景更新幅度与等值线；黑箭头使用该 block 的真实事件。
+GRID_SIZE = 41
 
 
 def main() -> None:
     """拟合或加载模型，然后生成同一测试 block 的教材图片。"""
     if FIT_MODELS:
-        if HIDDEN_DIM != 2:
-            raise ValueError("当前二维动力学绘图使用两个隐藏单元，请设置 HIDDEN_DIM=2。")
         blocks = load_blocks(DATA_DIR, ANIMAL_NAME, TRIAL_START, TRIAL_END)
         train_blocks, validation_blocks, test_blocks = split_blocks(
             blocks,
@@ -62,8 +61,6 @@ def main() -> None:
             test_fraction=TEST_FRACTION,
             seed=SEED,
         )
-        if not 0 <= PLOT_BLOCK_INDEX < len(test_blocks):
-            raise ValueError("PLOT_BLOCK_INDEX 超出了测试 block 的范围。")
         print(
             f"block 数：训练 {len(train_blocks)}，验证 {len(validation_blocks)}，"
             f"测试 {len(test_blocks)}。",
@@ -120,8 +117,6 @@ def main() -> None:
 
     for model_name, result in metrics.items():
         print(f"{model_name} 测试表现：{result}", flush=True)
-    if not 0 <= PLOT_BLOCK_INDEX < len(records):
-        raise ValueError("PLOT_BLOCK_INDEX 超出了保存的测试 block 范围。")
     record = records[PLOT_BLOCK_INDEX]
     print(
         f"绘图使用 {record['session_name']} 的 block {record['block_order']}，"
@@ -139,7 +134,14 @@ def main() -> None:
         # T 个预测前状态加上末状态，组成包含全部 T 次更新的完整轨迹。
         full_states = np.vstack([prediction["states"], prediction["final_state"]])
         state_limits = (0.0, 1.0) if model_name == "RW" else (-1.0, 1.0)
-        field = compute_vector_field(model, full_states, GRID_SIZE, state_limits)
+        field = compute_vector_field(
+            model,
+            full_states,
+            grid_size=GRID_SIZE,
+            state_limits=state_limits,
+            actions=record["actions"],
+            rewards=record["rewards"],
+        )
         plot_vector_field(field, model_name, record, figure_dir)
     print(f"结果保存至：{OUTPUT_DIR}", flush=True)
     print(f"PNG 和 SVG 图片保存至：{figure_dir}", flush=True)

@@ -296,106 +296,261 @@ def plot_state_trajectories(record: dict, output_dir: str | Path) -> None:
     _save(figure, output_dir, "states")
 
 
-def plot_vector_field(field: dict, model_name: str, block: dict, output_dir: str | Path) -> None:
-    """画四种动作/奖励事件的真实一步更新，箭头不归一化。
+def _decision_boundary_segment(
+    readout_vector: np.ndarray,
+    readout_bias: float,
+    x_limits: tuple[float, float],
+    y_limits: tuple[float, float],
+) -> np.ndarray:
+    """求 w·state+b=0 与可视矩形的交点，不把边界误写成经过原点。
 
-    四个面板采用 field 给出的同一坐标域和相同的箭头比例。
-    背景表示该状态下的 P(action=0)，固定使用 0–1 的色标。
+    直接求四条边上的交点，也适用于水平或竖直的决策边界。
+    如果读出权重为零，或边界没有穿过当前区域，就不画这条线。
+    """
+    vector_length = np.linalg.norm(readout_vector)
+    if vector_length == 0:
+        return np.empty((0, 2))
+    normal = readout_vector / vector_length
+    offset = readout_bias / vector_length
+    x_min, x_max = x_limits
+    y_min, y_max = y_limits
+    tolerance = 1e-10 * max(x_max - x_min, y_max - y_min, 1.0)
+    candidates = []
+
+    if abs(normal[1]) > 1e-12:
+        for x_value in x_limits:
+            y_value = -(normal[0] * x_value + offset) / normal[1]
+            if y_min - tolerance <= y_value <= y_max + tolerance:
+                candidates.append([x_value, float(np.clip(y_value, y_min, y_max))])
+    if abs(normal[0]) > 1e-12:
+        for y_value in y_limits:
+            x_value = -(normal[1] * y_value + offset) / normal[0]
+            if x_min - tolerance <= x_value <= x_max + tolerance:
+                candidates.append([float(np.clip(x_value, x_min, x_max)), y_value])
+
+    # 经过矩形角点时，同一个交点可能被两条边同时找到。
+    unique_points = []
+    for candidate in candidates:
+        already_found = any(
+            np.linalg.norm(np.asarray(candidate) - point) <= tolerance
+            for point in unique_points
+        )
+        if not already_found:
+            unique_points.append(np.asarray(candidate))
+    if len(unique_points) < 2:
+        return np.empty((0, 2))
+    return np.asarray(unique_points[:2])
+
+
+def _plot_readout(
+    axis,
+    field: dict,
+    action_zero: str,
+    x_limits: tuple[float, float],
+    y_limits: tuple[float, float],
+) -> None:
+    """画偏好动作 0 的方向和等概率边界，方向箭头长度只用于展示。"""
+    readout_vector = np.asarray(field["readout_vector"], dtype=float)
+    readout_bias = float(field["readout_bias"])
+    boundary = _decision_boundary_segment(readout_vector, readout_bias, x_limits, y_limits)
+    if len(boundary) == 2:
+        axis.plot(
+            boundary[:, 0],
+            boundary[:, 1],
+            color="#f28b19",
+            linestyle="--",
+            linewidth=1.8,
+            zorder=5,
+        )
+
+    vector_length = np.linalg.norm(readout_vector)
+    if vector_length == 0:
+        if readout_bias == 0:
+            readout_label = _label("所有状态：选择概率各为 50%", "All states: equal choice probabilities")
+        else:
+            readout_label = _label("选择偏好不随状态改变", "Choice preference does not depend on state")
+        axis.text(
+            0.04, 0.96, readout_label,
+            transform=axis.transAxes, va="top", fontsize=8, zorder=6,
+        )
+        return
+
+    # w = 两个 logit 的权重之差，沿 w 移动会增加 logit_0 - logit_1。
+    # 将方向归一化后画一支固定展示长度的箭头，不能把它当作状态更新量。
+    x_span = x_limits[1] - x_limits[0]
+    y_span = y_limits[1] - y_limits[0]
+    display_vector = readout_vector / vector_length * 0.17 * min(x_span, y_span)
+    center = np.array([x_limits[0] + 0.15 * x_span, y_limits[0] + 0.81 * y_span])
+    start = center - display_vector / 2
+    end = center + display_vector / 2
+    axis.annotate(
+        "",
+        xy=end,
+        xytext=start,
+        arrowprops={"arrowstyle": "-|>", "color": "#f28b19", "lw": 2.6, "mutation_scale": 16},
+        zorder=6,
+    )
+    axis.text(
+        0.04,
+        0.96,
+        _label(f"更偏向{action_zero}", f"Prefer {action_zero}"),
+        transform=axis.transAxes,
+        va="top",
+        fontsize=8,
+        color="#8b4400",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 2},
+        zorder=6,
+    )
+
+
+def plot_vector_field(field: dict, model_name: str, block: dict, output_dir: str | Path) -> None:
+    """用论文 Fig. 4a 的读图方式展示四种动作/奖励事件。
+
+    颜色和细等值线表示每 trial 的欧氏更新幅度；同一模型共用色标。
+    黑箭头默认只画真实行为序列中该事件对应的模型更新，并保留一步长度。
+    橙色箭头表示读出方向，橙色虚线表示两个动作概率相等的状态。
     """
     grid_x = np.asarray(field["x"])
     grid_y = np.asarray(field["y"])
-    probability = np.asarray(field["probability"])
     observed_states = np.asarray(field["observed_states"])
+    has_observed_events = field["has_observed_events"]
     coordinate_labels = _state_labels(model_name, block)
     action_labels = _action_labels(block)
-    figure, axes = plt.subplots(2, 2, figsize=(11, 9.5), sharex=True, sharey=True)
+    figure, axes = plt.subplots(2, 2, figsize=(11, 10), sharex=True, sharey=True)
 
-    # 坐标域也覆盖真实更新的终点，不能因为起点位于网格边缘而裁掉箭头。
-    # 四种事件使用同一范围，因此各面板之间仍可直接比较同一模型的更新。
+    # 上排无奖励，下排有奖励；每一列固定一个动作，与原文排列一致。
+    conditions = sorted(
+        field["conditions"],
+        key=lambda condition: (condition["reward"], condition["action"]),
+    )
+    speed_max = float(field["speed_max"])
+    # 完全不更新时，仍可画出零值背景；色标只显示实际存在的数值 0。
+    color_max = speed_max if speed_max > 0 else 1.0
+    color_levels = np.linspace(0, color_max, 21)
+    contour_levels = color_levels[1:-1]
+
+    # 四幅图使用相同的坐标域，包含背景网格和实际绘制的箭头终点。
     x_min = min(grid_x.min(), observed_states[:, 0].min())
     x_max = max(grid_x.max(), observed_states[:, 0].max())
     y_min = min(grid_y.min(), observed_states[:, 1].min())
     y_max = max(grid_y.max(), observed_states[:, 1].max())
-    for condition in field["conditions"]:
-        endpoint_x = grid_x + np.asarray(condition["dx"])
-        endpoint_y = grid_y + np.asarray(condition["dy"])
+    arrow_data = []
+    for condition in conditions:
+        if has_observed_events:
+            arrow_starts = np.asarray(condition["observed_states"]).reshape(-1, 2)
+            arrow_changes = np.asarray(condition["observed_changes"]).reshape(-1, 2)
+        else:
+            # 未提供行为事件时，仅以稀疏网格演示更新规则；图注会说明是假设状态。
+            stride = max(1, int(np.ceil(max(grid_x.shape) / 7)))
+            arrow_starts = np.column_stack(
+                (grid_x[::stride, ::stride].ravel(), grid_y[::stride, ::stride].ravel())
+            )
+            arrow_changes = np.column_stack(
+                (
+                    np.asarray(condition["dx"])[::stride, ::stride].ravel(),
+                    np.asarray(condition["dy"])[::stride, ::stride].ravel(),
+                )
+            )
+        arrow_data.append((arrow_starts, arrow_changes))
+        if len(arrow_starts) == 0:
+            continue
+        endpoints = arrow_starts + arrow_changes
+        endpoint_x = endpoints[:, 0]
+        endpoint_y = endpoints[:, 1]
         x_min = min(x_min, endpoint_x.min())
         x_max = max(x_max, endpoint_x.max())
         y_min = min(y_min, endpoint_y.min())
         y_max = max(y_max, endpoint_y.max())
-    x_margin = 0.04 * (x_max - x_min)
-    y_margin = 0.04 * (y_max - y_min)
+    x_margin = 0.02 * max(x_max - x_min, 0.1)
+    y_margin = 0.02 * max(y_max - y_min, 0.1)
+    x_limits = (x_min - x_margin, x_max + x_margin)
+    y_limits = (y_min - y_margin, y_max + y_margin)
 
-    for axis, condition in zip(axes.flat, field["conditions"]):
+    for axis, condition, (arrow_starts, arrow_changes) in zip(axes.flat, conditions, arrow_data):
         axis.grid(False)
-        background = axis.pcolormesh(
+        speed = np.asarray(condition["speed"])
+        background = axis.contourf(
             grid_x,
             grid_y,
-            probability,
-            cmap="RdBu_r",
-            vmin=0,
-            vmax=1,
-            shading="auto",
-            alpha=0.35,
-            rasterized=True,
+            speed,
+            levels=color_levels,
+            cmap="viridis",
+            alpha=0.22,
         )
-        # scale=1 表示坐标上的真实一步变化，而不是单位长度的方向箭头。
-        axis.quiver(
-            grid_x,
-            grid_y,
-            condition["dx"],
-            condition["dy"],
-            angles="xy",
-            scale_units="xy",
-            scale=1,
-            color="#263445",
-            width=0.003,
-            alpha=0.8,
-            zorder=3,
-        )
-        # 轨迹含全部 T+1 个状态，不能遗漏最后一次反馈之后的更新。
-        axis.plot(
-            observed_states[:, 0],
-            observed_states[:, 1],
-            color="#475569",
-            alpha=0.25,
-            linewidth=1.2,
-            zorder=2,
-        )
-        axis.scatter(observed_states[0, 0], observed_states[0, 1], s=32, color="#3c8760", zorder=4)
-        axis.scatter(
-            observed_states[-1, 0],
-            observed_states[-1, 1],
-            s=40,
-            color="#885b97",
-            marker="x",
-            zorder=4,
-        )
+        # 等值线连接“更新幅度相同”的状态，不是模型随时间移动的轨迹或流线。
+        visible_levels = contour_levels[
+            (contour_levels > speed.min()) & (contour_levels < speed.max())
+        ]
+        if len(visible_levels) > 0:
+            axis.contour(
+                grid_x, grid_y, speed,
+                levels=visible_levels, colors="black", linewidths=0.45, alpha=0.45,
+            )
+        if len(arrow_starts) > 0:
+            # scale=1 表示坐标上的真实一步变化；不同反馈的更新不会串成同一条线。
+            axis.quiver(
+                arrow_starts[:, 0],
+                arrow_starts[:, 1],
+                arrow_changes[:, 0],
+                arrow_changes[:, 1],
+                angles="xy",
+                scale_units="xy",
+                scale=1,
+                color="black",
+                width=0.004,
+                alpha=0.85,
+                zorder=4,
+            )
+        elif has_observed_events:
+            axis.text(
+                0.5, 0.05,
+                _label("该 block 中没有此事件", "No such event in this block"),
+                transform=axis.transAxes, ha="center", fontsize=8,
+            )
+        _plot_readout(axis, field, action_labels[0], x_limits, y_limits)
         action_label = action_labels[condition["action"]]
         reward_label = _label("有奖励", "reward") if condition["reward"] else _label("无奖励", "no reward")
         axis.set_title(_label(f"选择{action_label} · {reward_label}", f"Choose {action_label} · {reward_label}"))
         axis.set_xlabel(coordinate_labels[0])
         axis.set_ylabel(coordinate_labels[1])
-        axis.set_xlim(x_min - x_margin, x_max + x_margin)
-        axis.set_ylim(y_min - y_margin, y_max + y_margin)
+        axis.set_xlim(x_limits)
+        axis.set_ylim(y_limits)
         axis.set_aspect("equal", adjustable="box")
         axis.xaxis.set_major_locator(MaxNLocator(nbins=5))
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
 
     # 单独预留色标和说明的位置，避免挤压四个面板。
-    figure.subplots_adjust(left=0.08, right=0.84, bottom=0.14, top=0.9, wspace=0.22, hspace=0.27)
-    colorbar_axis = figure.add_axes((0.88, 0.2, 0.025, 0.62))
+    figure.subplots_adjust(left=0.08, right=0.84, bottom=0.21, top=0.9, wspace=0.22, hspace=0.27)
+    colorbar_axis = figure.add_axes((0.88, 0.25, 0.025, 0.57))
     colorbar = figure.colorbar(background, cax=colorbar_axis)
-    colorbar.set_label(_label(f"选择{action_labels[0]}的概率", f"P(choose {action_labels[0]})"))
+    colorbar.set_label(_label("每 trial 的状态更新幅度", "State change per trial"))
+    if speed_max == 0:
+        colorbar.set_ticks([0])
+    else:
+        colorbar.locator = MaxNLocator(nbins=6)
+        colorbar.update_ticks()
     figure.suptitle(f"{model_name} · {_block_title(block)}", fontsize=13)
+    if has_observed_events:
+        arrow_note = _label(
+            "黑箭头：该 block 的真实选择与反馈所驱动的模型更新，按四种事件分别显示。",
+            "Black arrows: model updates driven by observed choices and outcomes in this block, grouped by event.",
+        )
+    else:
+        arrow_note = _label(
+            "黑箭头：假设网格状态的一步更新；未提供行为事件，不代表实际访问过这些状态。",
+            "Black arrows: updates at hypothetical grid states; observed behavioral events were not supplied.",
+        )
     note = _label(
-        "箭头为真实的一步状态更新；浅灰线为该 block 的完整状态轨迹。\n"
-        "圆圈为初始状态，叉号为末次更新后状态。RW 与 GRU 的状态单位不同，箭头长度不用于比较学习率。",
-        "Arrows show one actual update; the light trajectory contains all states in this block.\n"
-        "Circle: initial state. Cross: after final update. RW and GRU have different state units;\n"
-        "arrow lengths do not compare learning rates.",
+        "颜色与细等值线：每 trial 的更新幅度（紫色小，黄色大）；等值线不表示轨迹。\n"
+        f"{arrow_note}\n"
+        f"橙色箭头：更偏向{action_labels[0]}的方向，长度仅作展示；橙色虚线：两个动作概率各为 50%。\n"
+        "GRU 使用普通线性读出，h1、h2 不能直接当作 Q 值；不同模型的色标独立，不能据此比较学习率。",
+        "Colors and thin contours: state change per trial (purple: small, yellow: large); contours are not trajectories.\n"
+        f"{arrow_note}\n"
+        f"Orange arrow: increasing preference for {action_labels[0]} (display length only); dashed line: equal choice probabilities.\n"
+        "GRU uses a general linear readout; h1 and h2 are not Q values. Model-specific color scales do not compare learning rates.",
     )
-    figure.text(0.5, 0.02, note, ha="center", va="bottom", fontsize=9, color="#475569", linespacing=1.4)
+    figure.text(0.5, 0.035, note, ha="center", va="bottom", fontsize=9, color="#475569", linespacing=1.65)
     _save(figure, output_dir, f"dynamics_{model_name.lower()}")
 
 

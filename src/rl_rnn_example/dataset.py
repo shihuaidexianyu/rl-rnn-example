@@ -35,9 +35,6 @@ def load_session(
     默认保留第 11–70 次；对应 Python 切片 [10:70]。
     每个 block 包含本文件顶部约定的所有字段，动作与奖励使用 NumPy 数组。
     """
-    if not 1 <= trial_start <= trial_end <= 80:
-        raise ValueError("保留范围应满足 1 <= trial_start <= trial_end <= 80。")
-
     # 使用 sio.loadmat(file_path, variable_names=["Y"]) 读取行为数据。
     # 返回的是字典，从中取出 Y；不需要读取神经数据 X。
     # Y 的每一行是一次试次，下面是从 0 开始的列索引：
@@ -72,17 +69,15 @@ def load_session(
         if not np.all(rows[:, 12] == 1):
             continue
         trial_numbers = rows[:, 5].astype(int)
-        if not np.array_equal(trial_numbers, np.arange(1, 81)):
-            raise ValueError(f"{session_name} 的 block {block_order} 不是完整的 80 次序列。")
         task_type = int(rows[0, 9])
-        if task_type not in (1, 2) or not np.all(rows[:, 9] == task_type):
-            raise ValueError(f"{session_name} 的 block {block_order} 任务类型不一致。")
         block_type = "what" if task_type == 1 else "where"
         # 保留原始编号，即使后面改变截取范围，也不会丢掉反转位置。
         # 反转位置只用于分析和标注，不送入 RW 或 GRU。
         reversal_trials = trial_numbers[rows[:, 6] == 1]
         if len(reversal_trials) != 1:
-            raise ValueError(f"{session_name} 的 block {block_order} 应恰好有一次反转。")
+            raise ValueError(
+                f"{session_name} 的 block {block_order} 应恰好有一次反转。"
+            )
         reversal_trial = int(reversal_trials[0])
         # what 使用图像选择作为 actions；where 使用位置选择。
         action_col = 0 if task_type == 1 else 1
@@ -103,8 +98,8 @@ def load_session(
                 "block_order": int(block_order),
                 "block_type": block_type,
                 "trial_numbers": trial_numbers,
-                "actions": actions,
-                "rewards": rewards,
+                "actions": actions,  # 形状为 (trial_end - trial_start + 1,)
+                "rewards": rewards,  # 形状为 (trial_end - trial_start + 1,)
                 "reversal_trial": reversal_trial,
             }
         )
@@ -126,6 +121,7 @@ def load_blocks(
     # 对文件名排序，保证多次运行的 block 顺序一致；找不到文件时明确报错。
     # 动物名和 cue 之间还有日期，glob 模式里需要通配符。
     mat_files = sorted(data_dir.glob(f"SPKcounts_{animal_name}*cue_MW_250X250ms.mat"))
+    print(f"Found MAT files for animal {animal_name}: {mat_files}")
     if not mat_files:
         raise FileNotFoundError(f"No MAT files found for animal {animal_name}.")
     # 逐个调用 load_session，传入相同的 trial_start 和 trial_end。

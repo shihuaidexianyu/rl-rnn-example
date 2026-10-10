@@ -75,8 +75,4 @@ class RWModel:
         和 GRU 使用相同的分析接口，方便用同一段代码计算更新箭头。
         """
         values = np.asarray(state, dtype=float)
-        if values.shape != (2,):
-            raise ValueError("RW 状态必须是包含两个 Q 值的一维数组。")
-        if action not in (0, 1) or reward not in (0, 1):
-            raise ValueError("动作和奖励只能是 0 或 1。")
         return self.update_values(values, action, reward)
