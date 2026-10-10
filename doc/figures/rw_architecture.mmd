@@ -1,0 +1,7 @@
+flowchart LR
+    Qt["Q_t = (Q_t(0), Q_t(1))"] --> Update["价值更新：仅更新被选动作"]
+    Event["真实动作与奖励 (a_t, r_t)"] --> Update
+    Update --> Qnext["Q_(t+1)"]
+    Qt -->|"softmax(βQ_t)"| Pt["p_t"]
+    classDef plain fill:#ffffff,stroke:#222222,color:#222222;
+    class Qt,Update,Event,Qnext,Pt plain;

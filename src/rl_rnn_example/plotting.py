@@ -119,11 +119,15 @@ def _trial_axis(axis, block: dict, show_reversal_label: bool = False) -> None:
 
 
 def _save(figure, output_dir: str | Path, filename: str) -> None:
-    """保存同一张图的两种格式，完成后释放图对象。"""
+    """保存用于排版的 SVG 和用于预览的 PNG，完成后释放图对象。"""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         figure.savefig(output_dir / f"{filename}.png", dpi=180, bbox_inches="tight")
+        # 色标等对象可能默认转成位图；导出 SVG 时保留为矢量元素。
+        for artist in figure.findobj():
+            if artist.get_rasterized():
+                artist.set_rasterized(False)
         figure.savefig(output_dir / f"{filename}.svg", bbox_inches="tight")
     finally:
         plt.close(figure)
@@ -879,7 +883,7 @@ def plot_dynamics_comparison(fields: dict, output_dir: str | Path) -> None:
                     cmap=pale_colormap,
                     vmin=0,
                     vmax=color_max,
-                    rasterized=True,
+                    rasterized=False,
                 )
                 # 细线连接更新幅度相同的起点；它们不是连续的状态轨迹。
                 visible_levels = contour_levels[

@@ -1,0 +1,22 @@
+flowchart TB
+    subgraph Time[试次间的状态传递]
+        hp["h_(t-1)"] --> gp["GRU θ"] --> ht["h_t"] --> gc["GRU θ"] --> hn["h_(t+1)"]
+        xp["x_(t-1)"] --> gp
+        xt["x_t = (a_t, r_t)"] --> gc
+        ht --> readout["线性读出 → softmax"] --> pt["p_t"]
+    end
+    subgraph Cell[GRU 的内部计算]
+        reset["重置门：σ(W_ρ [x_t; h_t] + b_ρ)"]
+        update["更新门：σ(W_z [x_t; h_t] + b_z)"]
+        %% 圈内点表示逐元素乘，圈内加号表示逐元素加。
+        h["h_t"] --> hidden_affine["W_h h_t + b_h"] --> reset_multiply(("·"))
+        reset -->|ρ_t| reset_multiply
+        x["x_t"] --> input_affine["W_x x_t + b_x"] --> candidate_sum(("+"))
+        reset_multiply --> candidate_sum --> tanh["tanh"] --> candidate_multiply(("·"))
+        update -->|z_t| old_multiply(("·"))
+        h --> old_multiply
+        update -->|1 − z_t| candidate_multiply
+        candidate_multiply --> final_sum(("+"))
+        old_multiply --> final_sum --> result["h_(t+1)"]
+    end
+    classDef default fill:#fff,stroke:#222,color:#222;
