@@ -12,9 +12,9 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import font_manager
 from matplotlib.ticker import MaxNLocator
-import numpy as np
 
 
 def _configure_fonts() -> bool:
@@ -152,10 +152,14 @@ def plot_behavior(block: dict, output_dir: str | Path) -> None:
     # 奖励是实际获得的反馈；未获奖励不意味着一定选错了高概率选项。
     reward_axis.vlines(trials, 0, rewards, color="#c97722", linewidth=1.5, alpha=0.65)
     reward_axis.scatter(trials, rewards, s=24, color="#c97722", zorder=3)
-    reward_axis.set_yticks([0, 1], [_label("无奖励", "No reward"), _label("有奖励", "Reward")])
+    reward_axis.set_yticks(
+        [0, 1], [_label("无奖励", "No reward"), _label("有奖励", "Reward")]
+    )
     reward_axis.set_ylim(-0.15, 1.15)
     reward_axis.set_ylabel(_label("实际反馈", "Observed outcome"))
-    reward_axis.set_xlabel(_label("block 内原始试次编号", "Original trial within block"))
+    reward_axis.set_xlabel(
+        _label("block 内原始试次编号", "Original trial within block")
+    )
     _trial_axis(reward_axis, block)
 
     figure.suptitle(_block_title(block), fontsize=13)
@@ -235,7 +239,8 @@ def plot_block_example(record: dict, output_dir: str | Path) -> None:
     action_zero, action_one = _action_labels(record)
 
     figure, axes = plt.subplots(
-        4, 1,
+        4,
+        1,
         figsize=(11.5, 10),
         sharex=True,
         gridspec_kw={"height_ratios": [1, 1, 1.5, 1.5]},
@@ -247,18 +252,25 @@ def plot_block_example(record: dict, output_dir: str | Path) -> None:
     choice_axis.set_yticks([0, 1], [action_zero, action_one])
     choice_axis.set_ylim(-0.2, 1.2)
     choice_axis.set_ylabel(_label("实际选择", "Observed choice"))
-    choice_axis.set_title(_label("猴子的选择与反馈", "Observed choices and outcomes"), loc="left")
+    choice_axis.set_title(
+        _label("猴子的选择与反馈", "Observed choices and outcomes"), loc="left"
+    )
 
     reward_axis.vlines(trials, 0, rewards, color="#c97722", linewidth=1.4, alpha=0.6)
     reward_axis.scatter(trials, rewards, s=25, color="#c97722", zorder=3)
-    reward_axis.set_yticks([0, 1], [_label("无奖励", "No reward"), _label("有奖励", "Reward")])
+    reward_axis.set_yticks(
+        [0, 1], [_label("无奖励", "No reward"), _label("有奖励", "Reward")]
+    )
     reward_axis.set_ylim(-0.2, 1.2)
     reward_axis.set_ylabel(_label("实际奖励", "Observed reward"))
 
     state_axis.plot(trials, states[:, 0], color="#2864ba", linewidth=1.8, label="h1")
     state_axis.plot(trials, states[:, 1], color="#8b5fbf", linewidth=1.8, label="h2")
     state_axis.set_ylabel(_label("隐藏状态", "Hidden state"))
-    state_axis.set_title(_label("GRU：本次选择前的状态", "GRU: state before the current choice"), loc="left")
+    state_axis.set_title(
+        _label("GRU：本次选择前的状态", "GRU: state before the current choice"),
+        loc="left",
+    )
     state_axis.legend(loc="best", ncols=2, fontsize=9)
 
     # GRU 是此图要解释的模型；RW 作为对照，用较细的虚线区分。
@@ -277,9 +289,18 @@ def plot_block_example(record: dict, output_dir: str | Path) -> None:
     prediction_axis.axhline(0.5, color="#64748b", linestyle=":", linewidth=1)
     prediction_axis.set_ylim(-0.05, 1.05)
     prediction_axis.set_yticks([0, 0.5, 1])
-    prediction_axis.set_ylabel(_label(f"选择{action_zero}的概率", f"P(choose {action_zero})"))
-    prediction_axis.set_title(_label("模型：本次选择前的预测", "Models: prediction before the current choice"), loc="left")
-    prediction_axis.set_xlabel(_label("block 内原始试次编号", "Original trial within block"))
+    prediction_axis.set_ylabel(
+        _label(f"选择{action_zero}的概率", f"P(choose {action_zero})")
+    )
+    prediction_axis.set_title(
+        _label(
+            "模型：本次选择前的预测", "Models: prediction before the current choice"
+        ),
+        loc="left",
+    )
+    prediction_axis.set_xlabel(
+        _label("block 内原始试次编号", "Original trial within block")
+    )
     prediction_axis.legend(loc="best", ncols=2, fontsize=9)
 
     for axis in axes:
@@ -289,7 +310,9 @@ def plot_block_example(record: dict, output_dir: str | Path) -> None:
         choice_axis.legend(loc="lower right", bbox_to_anchor=(1, 1.02), fontsize=9)
 
     figure.suptitle(
-        _label("单个 block 的运行示例", "One-block example") + "\n" + _block_title(record),
+        _label("单个 block 的运行示例", "One-block example")
+        + "\n"
+        + _block_title(record),
         fontsize=13,
     )
     note = _label(
@@ -298,7 +321,16 @@ def plot_block_example(record: dict, output_dir: str | Path) -> None:
         "Panels share original trial numbers; red dashed lines mark programmed reversal. Hidden states are model quantities.\n"
         "States and probabilities at trial t precede the choice; its action and reward update the state and prediction for trial t+1.",
     )
-    figure.text(0.5, 0.018, note, ha="center", va="bottom", fontsize=9, color="#475569", linespacing=1.6)
+    figure.text(
+        0.5,
+        0.018,
+        note,
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#475569",
+        linespacing=1.6,
+    )
     figure.tight_layout(rect=(0, 0.08, 1, 0.98), h_pad=1.5)
     _save(figure, output_dir, "block_example")
 
@@ -325,8 +357,12 @@ def plot_state_trajectories(record: dict, output_dir: str | Path) -> None:
                 label=coordinate_labels[coordinate_index],
             )
         _trial_axis(time_axis, record, show_reversal_label=True)
-        time_axis.set_title(_label(f"{model_name}：选择前状态", f"{model_name}: state before choice"))
-        time_axis.set_xlabel(_label("block 内原始试次编号", "Original trial within block"))
+        time_axis.set_title(
+            _label(f"{model_name}：选择前状态", f"{model_name}: state before choice")
+        )
+        time_axis.set_xlabel(
+            _label("block 内原始试次编号", "Original trial within block")
+        )
         time_axis.set_ylabel(_label("状态值", "State value"))
         time_axis.legend(loc="best", fontsize=9)
 
@@ -362,7 +398,9 @@ def plot_state_trajectories(record: dict, output_dir: str | Path) -> None:
             label=_label("末次更新后", "After final update"),
             zorder=3,
         )
-        path_axis.set_title(_label(f"{model_name}：完整二维轨迹", f"{model_name}: complete trajectory"))
+        path_axis.set_title(
+            _label(f"{model_name}：完整二维轨迹", f"{model_name}: complete trajectory")
+        )
         path_axis.set_xlabel(coordinate_labels[0])
         path_axis.set_ylabel(coordinate_labels[1])
         path_axis.legend(loc="best", fontsize=9)
@@ -433,7 +471,9 @@ def _plot_readout(
     """画偏好动作 0 的方向和等概率边界，方向箭头长度只用于展示。"""
     readout_vector = np.asarray(field["readout_vector"], dtype=float)
     readout_bias = float(field["readout_bias"])
-    boundary = _decision_boundary_segment(readout_vector, readout_bias, x_limits, y_limits)
+    boundary = _decision_boundary_segment(
+        readout_vector, readout_bias, x_limits, y_limits
+    )
     if len(boundary) == 2:
         axis.plot(
             boundary[:, 0],
@@ -447,12 +487,21 @@ def _plot_readout(
     vector_length = np.linalg.norm(readout_vector)
     if vector_length == 0:
         if readout_bias == 0:
-            readout_label = _label("所有状态：选择概率各为 50%", "All states: equal choice probabilities")
+            readout_label = _label(
+                "所有状态：选择概率各为 50%", "All states: equal choice probabilities"
+            )
         else:
-            readout_label = _label("选择偏好不随状态改变", "Choice preference does not depend on state")
+            readout_label = _label(
+                "选择偏好不随状态改变", "Choice preference does not depend on state"
+            )
         axis.text(
-            0.04, 0.96, readout_label,
-            transform=axis.transAxes, va="top", fontsize=8, zorder=6,
+            0.04,
+            0.96,
+            readout_label,
+            transform=axis.transAxes,
+            va="top",
+            fontsize=8,
+            zorder=6,
         )
         return
 
@@ -468,7 +517,12 @@ def _plot_readout(
         "",
         xy=end,
         xytext=start,
-        arrowprops={"arrowstyle": "-|>", "color": "#f28b19", "lw": 2.6, "mutation_scale": 16},
+        arrowprops={
+            "arrowstyle": "-|>",
+            "color": "#f28b19",
+            "lw": 2.6,
+            "mutation_scale": 16,
+        },
         zorder=6,
     )
     axis.text(
@@ -497,7 +551,9 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
     observed_states = np.asarray(field["observed_states"])
     source_blocks = field["source_blocks"]
     animal_names = sorted({block["animal_name"] for block in source_blocks})
-    session_ids = {(block["animal_name"], block["session_name"]) for block in source_blocks}
+    session_ids = {
+        (block["animal_name"], block["session_name"]) for block in source_blocks
+    }
     block_types = {block["block_type"] for block in source_blocks}
 
     # 混合 what / where 时，动作 0 分别对应图像 0 / 位置 0，不能只写其中一种。
@@ -538,7 +594,9 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
     x_limits = (x_min - x_margin, x_max + x_margin)
     y_limits = (y_min - y_margin, y_max + y_margin)
 
-    for axis, condition, (arrow_starts, arrow_changes) in zip(axes.flat, conditions, arrow_data):
+    for axis, condition, (arrow_starts, arrow_changes) in zip(
+        axes.flat, conditions, arrow_data
+    ):
         axis.grid(False)
         speed = np.asarray(condition["speed"])
         background = axis.contourf(
@@ -555,8 +613,13 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
         ]
         if len(visible_levels) > 0:
             axis.contour(
-                grid_x, grid_y, speed,
-                levels=visible_levels, colors="black", linewidths=0.45, alpha=0.45,
+                grid_x,
+                grid_y,
+                speed,
+                levels=visible_levels,
+                colors="black",
+                linewidths=0.45,
+                alpha=0.45,
             )
         if len(arrow_starts) > 0:
             # scale=1 表示坐标上的真实一步变化；不同反馈的更新不会串成同一条线。
@@ -575,18 +638,29 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
             )
         else:
             axis.text(
-                0.5, 0.05,
-                _label("这些 block 中没有此事件", "No such event in the selected blocks"),
-                transform=axis.transAxes, ha="center", fontsize=8,
+                0.5,
+                0.05,
+                _label(
+                    "这些 block 中没有此事件", "No such event in the selected blocks"
+                ),
+                transform=axis.transAxes,
+                ha="center",
+                fontsize=8,
             )
         _plot_readout(axis, field, action_labels[0], x_limits, y_limits)
         action_label = action_labels[condition["action"]]
-        reward_label = _label("有奖励", "reward") if condition["reward"] else _label("无奖励", "no reward")
+        reward_label = (
+            _label("有奖励", "reward")
+            if condition["reward"]
+            else _label("无奖励", "no reward")
+        )
         arrow_count = f"{condition['n_displayed']} / {condition['n_observed']}"
-        axis.set_title(_label(
-            f"选择{action_label} · {reward_label}\n显示箭头：{arrow_count} 次事件",
-            f"Choose {action_label} · {reward_label}\nDisplayed arrows: {arrow_count} events",
-        ))
+        axis.set_title(
+            _label(
+                f"选择{action_label} · {reward_label}\n显示箭头：{arrow_count} 次事件",
+                f"Choose {action_label} · {reward_label}\nDisplayed arrows: {arrow_count} events",
+            )
+        )
         axis.set_xlabel(coordinate_labels[0])
         axis.set_ylabel(coordinate_labels[1])
         axis.set_xlim(x_limits)
@@ -596,7 +670,9 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
 
     # 单独预留色标和说明的位置，避免挤压四个面板。
-    figure.subplots_adjust(left=0.08, right=0.84, bottom=0.24, top=0.86, wspace=0.22, hspace=0.34)
+    figure.subplots_adjust(
+        left=0.08, right=0.84, bottom=0.24, top=0.86, wspace=0.22, hspace=0.34
+    )
     colorbar_axis = figure.add_axes((0.88, 0.28, 0.025, 0.53))
     colorbar = figure.colorbar(background, cax=colorbar_axis)
     colorbar.set_label(_label("每 trial 的状态更新幅度", "State change per trial"))
@@ -610,8 +686,12 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
         f"Monkey {', '.join(animal_names)} · {len(source_blocks)} blocks · {len(session_ids)} sessions · {field['n_trials']} events",
     )
     figure.suptitle(
-        _label(f"{model_name} · 固定模型的状态更新规则", f"{model_name} · State updates of one fixed model")
-        + "\n" + source_description,
+        _label(
+            f"{model_name} · 固定模型的状态更新规则",
+            f"{model_name} · State updates of one fixed model",
+        )
+        + "\n"
+        + source_description,
         fontsize=13,
     )
     if field["max_arrows_per_condition"] is None:
@@ -621,12 +701,16 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
             f"每类最多抽取 {field['max_arrows_per_condition']} 次事件，固定种子 {field['sample_seed']}",
             f"up to {field['max_arrows_per_condition']} events per condition, seed {field['sample_seed']}",
         )
-    model_note = _label(
-        "GRU 使用普通线性读出，h1、h2 不能直接当作 Q 值。",
-        "GRU has a general linear readout; h1 and h2 are not Q values.",
-    ) if model_name == "GRU" else _label(
-        "RW 的两个坐标是两个选项的价值 Q。",
-        "The two RW coordinates are the option values Q.",
+    model_note = (
+        _label(
+            "GRU 使用普通线性读出，h1、h2 不能直接当作 Q 值。",
+            "GRU has a general linear readout; h1 and h2 are not Q values.",
+        )
+        if model_name == "GRU"
+        else _label(
+            "RW 的两个坐标是两个选项的价值 Q。",
+            "The two RW coordinates are the option values Q.",
+        )
     )
     note = _label(
         "颜色与细等值线：假设状态下每 trial 的更新幅度（紫色小，黄色大）；等值线不是轨迹。\n"
@@ -640,7 +724,16 @@ def plot_vector_field(field: dict, model_name: str, output_dir: str | Path) -> N
         "what uses image codes; where uses location codes. Blocks reset independently and share one set of weights.\n"
         f"{model_note} Color scales are model-specific and do not compare learning rates.",
     )
-    figure.text(0.5, 0.035, note, ha="center", va="bottom", fontsize=9, color="#475569", linespacing=1.65)
+    figure.text(
+        0.5,
+        0.035,
+        note,
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#475569",
+        linespacing=1.65,
+    )
     _save(figure, output_dir, f"dynamics_{model_name.lower()}")
 
 
@@ -729,7 +822,8 @@ def plot_dynamics_comparison(fields: dict, output_dir: str | Path) -> None:
     with _publication_style():
         figure = plt.figure(figsize=(8.0, 4.2))
         layout = figure.add_gridspec(
-            2, 5,
+            2,
+            5,
             width_ratios=[1, 1, 1, 1, 0.07],
             left=0.10,
             right=0.90,
@@ -825,7 +919,9 @@ def plot_dynamics_comparison(fields: dict, output_dir: str | Path) -> None:
                     )
                 else:
                     axis.text(
-                        0.5, 0.07, r"$n=0$",
+                        0.5,
+                        0.07,
+                        r"$n=0$",
                         transform=axis.transAxes,
                         ha="center",
                         fontsize=8,
@@ -847,17 +943,25 @@ def plot_dynamics_comparison(fields: dict, output_dir: str | Path) -> None:
                 axis.set_aspect("equal", adjustable="box")
                 axis.xaxis.set_major_locator(MaxNLocator(nbins=3))
                 axis.yaxis.set_major_locator(MaxNLocator(nbins=3))
-                axis.set_xlabel(r"$Q_0$" if model_name == "RW" else r"$h_1$", labelpad=2)
+                axis.set_xlabel(
+                    r"$Q_0$" if model_name == "RW" else r"$h_1$", labelpad=2
+                )
                 if column_index == 0:
-                    axis.set_ylabel(r"$Q_1$" if model_name == "RW" else r"$h_2$", labelpad=2)
+                    axis.set_ylabel(
+                        r"$Q_1$" if model_name == "RW" else r"$h_2$", labelpad=2
+                    )
                 else:
                     axis.tick_params(axis="y", labelleft=False)
                 if row_index == 0:
                     action, reward = event
                     axis.set_title(rf"$(a_t,r_t)=({action},{reward})$", pad=13)
-                panel_letter = chr(ord("a") + row_index * len(event_order) + column_index)
+                panel_letter = chr(
+                    ord("a") + row_index * len(event_order) + column_index
+                )
                 axis.text(
-                    0.02, 1.035, panel_letter,
+                    0.02,
+                    1.035,
+                    panel_letter,
                     transform=axis.transAxes,
                     fontweight="bold",
                     fontsize=9,
@@ -914,12 +1018,16 @@ def plot_model_comparison(comparison: dict, output_dir: str | Path) -> None:
 
     with _publication_style():
         figure, axes = plt.subplots(1, 2, figsize=(7.0, 2.7))
-        figure.subplots_adjust(left=0.09, right=0.985, bottom=0.18, top=0.90, wspace=0.45)
+        figure.subplots_adjust(
+            left=0.09, right=0.985, bottom=0.18, top=0.90, wspace=0.45
+        )
         for panel, axis, values in zip("ab", axes, (nll_values, accuracy_values)):
             bars = axis.bar(model_names, values, width=0.55, color=colors)
             axis.margins(x=0.26)
             axis.text(
-                -0.20, 1.04, panel,
+                -0.20,
+                1.04,
+                panel,
                 transform=axis.transAxes,
                 fontsize=10,
                 fontweight="bold",
@@ -956,7 +1064,9 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
     """
     with _publication_style():
         figure, axes = plt.subplots(1, 2, figsize=(7.0, 3.4))
-        figure.subplots_adjust(left=0.09, right=0.985, bottom=0.25, top=0.85, wspace=0.45)
+        figure.subplots_adjust(
+            left=0.09, right=0.985, bottom=0.25, top=0.85, wspace=0.45
+        )
 
         for panel, axis, model_name in zip("ab", axes, ("RW", "GRU")):
             result = step["models"][model_name]
@@ -966,7 +1076,9 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
             color = MODEL_COLORS[model_name]
             axis.set_title(model_name, loc="left", pad=6)
             axis.text(
-                -0.23, 1.03, panel,
+                -0.23,
+                1.03,
+                panel,
                 transform=axis.transAxes,
                 fontsize=10,
                 fontweight="bold",
@@ -993,7 +1105,10 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
             unchanged = np.array_equal(before, after)
             if not unchanged:
                 axis.quiver(
-                    before[0], before[1], change[0], change[1],
+                    before[0],
+                    before[1],
+                    change[0],
+                    change[1],
                     angles="xy",
                     scale_units="xy",
                     scale=1,
@@ -1005,7 +1120,8 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
                     zorder=3,
                 )
             axis.scatter(
-                before[0], before[1],
+                before[0],
+                before[1],
                 s=38,
                 facecolors="white",
                 edgecolors=color,
@@ -1027,7 +1143,8 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
             before_probability = result["probabilities_before"][0]
             after_probability = result["probabilities_after"][0]
             axis.text(
-                0.5, -0.32,
+                0.5,
+                -0.32,
                 rf"$P(a=0):\ {before_probability:.3f}\rightarrow {after_probability:.3f}$",
                 transform=axis.transAxes,
                 ha="center",
@@ -1042,13 +1159,24 @@ def plot_one_step(step: dict, output_dir: str | Path) -> None:
         figure.text(0.5, 0.97, input_label, ha="center", va="top", fontsize=9)
         legend_handles = [
             plt.Line2D(
-                [], [], linestyle="none", marker="o", markersize=5,
-                markerfacecolor="white", markeredgecolor="#333333",
-                markeredgewidth=1.0, label=r"$s_t$",
+                [],
+                [],
+                linestyle="none",
+                marker="o",
+                markersize=5,
+                markerfacecolor="white",
+                markeredgecolor="#333333",
+                markeredgewidth=1.0,
+                label=r"$s_t$",
             ),
             plt.Line2D(
-                [], [], linestyle="none", marker="o", markersize=4,
-                markerfacecolor="#333333", markeredgecolor="#333333",
+                [],
+                [],
+                linestyle="none",
+                marker="o",
+                markersize=4,
+                markerfacecolor="#333333",
+                markeredgecolor="#333333",
                 label=r"$s_{t+1}$",
             ),
         ]
