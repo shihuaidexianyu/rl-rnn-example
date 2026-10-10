@@ -1,4 +1,4 @@
-"""第二步：手写反转学习中的 RW 模型。
+"""反转学习中的 RW（Rescorla-Wagner）模型。
 
 固定参数 alpha、iTemp 时，模型根据每次真实选择和奖励更新 Q 值。
 参数拟合放在 training.py；本文件只负责价值更新和选择概率计算。
@@ -46,10 +46,11 @@ class RWModel:
         返回：
             probabilities: NumPy 数组，形状为 (T, 2)。
             states: NumPy 数组，形状为 (T, 2)，每行是 [Q(A), Q(B)]。
+            final_state: 形状为 (2,)，读完最后一次动作与奖励后的 Q 值。
 
         时序约定：第 t 行状态和概率来自读取第 t 次事件之前。
         即先预测 actions[t]，再读取 actions[t]、rewards[t] 更新价值。
-        返回 T 行，不包含读完最后一次事件后的额外状态。
+        states 保持 T 行；最后一次更新后的状态单独保存在 final_state。
         """
         # 每次调用都从 Q=[0, 0] 开始，不继承上一个 block 的状态。
         values = np.array([0.0, 0.0], dtype=float)
@@ -65,4 +66,17 @@ class RWModel:
         return {
             "probabilities": np.array(probabilities),
             "states": np.array(states),
+            "final_state": values.copy(),
         }
+
+    def update_state(self, state: np.ndarray, action: int, reward: int) -> np.ndarray:
+        """供动力学分析使用：从指定 Q 值出发更新一步，不重置状态。
+
+        和 GRU 使用相同的分析接口，方便用同一段代码计算更新箭头。
+        """
+        values = np.asarray(state, dtype=float)
+        if values.shape != (2,):
+            raise ValueError("RW 状态必须是包含两个 Q 值的一维数组。")
+        if action not in (0, 1) or reward not in (0, 1):
+            raise ValueError("动作和奖励只能是 0 或 1。")
+        return self.update_values(values, action, reward)

@@ -1,10 +1,11 @@
 [project]
 name = "rl-rnn-example"
 version = "0.1.0"
-description = "猴子反转学习的 RW 与 GRU 学习框架"
+description = "猴子反转学习的 RW 与 GRU 拟合和动力学分析"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "matplotlib>=3.11.2",
     "numpy>=2.5.3",
     "scipy>=1.18.1",
     "torch>=2.14.1",

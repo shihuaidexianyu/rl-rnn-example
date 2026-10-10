@@ -1,7 +1,6 @@
-"""第四步：用 GRU 预测猴子的选择。
+"""用 GRU 预测猴子的选择。
 
-本框架专门处理一步反转学习，输入只有 [action, reward] 两项。
-不再保留作者框架中与 action 重复的 stage2 字段。
+专门处理一步反转学习，输入只有 [action, reward] 两项。
 forward 用于训练，必须保留梯度；predict_block 用于评估和查看状态。
 """
 
@@ -32,6 +31,7 @@ class GRUModel(nn.Module):
         返回：
             logits: 形状为 (T, B, 2)，用于预测当前试次的动作分数。
             states: 形状为 (T, B, hidden_dim)，预测当前试次时的隐藏状态。
+            final_state: 形状为 (B, hidden_dim)，最后一次更新后的隐藏状态。
 
         第 t 行输出只能使用第 t 次之前的信息，不能先读 inputs[t] 再预测 actions[t]。
         """
@@ -40,7 +40,7 @@ class GRUModel(nn.Module):
             1, inputs.size(1), self.hidden_dim, device=inputs.device, dtype=inputs.dtype
         )
         # 运行 GRU，得到逐次读取输入后的状态。
-        states, _ = self.gru(inputs, self.h0)
+        states, final_state = self.gru(inputs, self.h0)
         # 在状态序列开头放入初始零状态，去掉最后一个更新后的状态。
         # 这样第一条预测使用 h0，第二条预测使用读完第一条输入后的 h1。
         states = torch.cat([self.h0, states[:-1]], dim=0)
@@ -48,19 +48,27 @@ class GRUModel(nn.Module):
         # 训练时不要在这里转成 NumPy 或 detach，否则会断开梯度。
         # CrossEntropyLoss 直接接收 logits，不要提前对它执行 softmax。
         logits = self.linear(states)
-        return {"logits": logits, "states": states}
+        return {
+            "logits": logits,
+            "states": states,
+            "final_state": final_state.squeeze(0),
+        }
 
     def predict_block(self, actions: np.ndarray, rewards: np.ndarray) -> dict:
         """评估一个 block，与 RWModel 使用相同的返回接口。
 
         输入：长度相同的一维 actions、rewards 数组。
         返回：NumPy 格式的 probabilities (T, 2) 和 states (T, hidden_dim)。
+        final_state (hidden_dim,) 另存最后一次更新后的状态，方便画完整轨迹。
         states[t] 表示读取本次事件之前的隐藏状态，不直接等同于动作价值。
         """
         # 将动作和奖励组成 (T, 1, 2) 的浮点 Tensor。
         # Tensor 的 dtype 和 device 与模型参数一致，避免 NumPy 默认的 float64 类型不匹配。
+        parameter = next(self.parameters())
         inputs = torch.tensor(
-            np.stack([actions, rewards], axis=-1), dtype=torch.float32
+            np.stack([actions, rewards], axis=-1),
+            dtype=parameter.dtype,
+            device=parameter.device,
         ).unsqueeze(1)  # (T, 1, 2)
         # 切换到评估模式，在 torch.no_grad() 中调用 forward。
         self.eval()
@@ -74,4 +82,43 @@ class GRUModel(nn.Module):
         # 这个方法用于评估；训练必须调用 forward，以保留梯度。
         probabilities = probabilities.squeeze(1).cpu().numpy()
         states = states.squeeze(1).cpu().numpy()
-        return {"probabilities": probabilities, "states": states}
+        final_state = result["final_state"][0].cpu().numpy()
+        return {
+            "probabilities": probabilities,
+            "states": states,
+            "final_state": final_state,
+        }
+
+    def update_state(self, state: np.ndarray, action: int, reward: int) -> np.ndarray:
+        """从指定隐藏状态读取一次动作和奖励，返回更新后的 NumPy 状态。
+
+        用于画动力学箭头，不进行参数优化。这里直接调用 GRU 层，
+        避免 forward 中的零初始化和预测前状态对齐。
+        """
+        state = np.asarray(state)
+        if state.shape != (self.hidden_dim,):
+            raise ValueError("隐藏状态的长度必须等于 hidden_dim。")
+        if action not in (0, 1) or reward not in (0, 1):
+            raise ValueError("动作和奖励只能是 0 或 1。")
+        parameter = next(self.parameters())
+        hidden = torch.tensor(state, dtype=parameter.dtype, device=parameter.device)
+        hidden = hidden.reshape(1, 1, self.hidden_dim)
+        inputs = torch.tensor(
+            [[[action, reward]]], dtype=parameter.dtype, device=parameter.device
+        )
+        self.eval()
+        with torch.no_grad():
+            _, next_hidden = self.gru(inputs, hidden)
+        return next_hidden[0, 0].cpu().numpy()
+
+    def choice_probabilities(self, state: np.ndarray) -> np.ndarray:
+        """把指定隐藏状态转换为两个动作的概率，用于状态平面的背景色。"""
+        state = np.asarray(state)
+        if state.shape != (self.hidden_dim,):
+            raise ValueError("隐藏状态的长度必须等于 hidden_dim。")
+        parameter = next(self.parameters())
+        hidden = torch.tensor(state, dtype=parameter.dtype, device=parameter.device)
+        with torch.no_grad():
+            logits = self.linear(hidden)
+            probabilities = torch.softmax(logits, dim=-1)
+        return probabilities.cpu().numpy()

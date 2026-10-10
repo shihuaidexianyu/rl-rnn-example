@@ -1,7 +1,7 @@
-"""第五步：划分完整 block，并分别拟合 RW 和 GRU。
+"""划分完整 block，并分别拟合 RW 和 GRU。
 
 多个训练 block 共同拟合一组参数；每个 block 的内部状态独立初始化。
-先完成一次固定的训练/验证/测试划分，暂不加入原论文的嵌套交叉验证。
+当前采用一次固定的训练/验证/测试划分，不做嵌套交叉验证。
 """
 
 import copy
@@ -23,7 +23,15 @@ def split_blocks(
 
     默认各取约 10% 的 block 作为验证和测试，剩余约 80% 用于训练。
     相同输入和随机种子应得到相同划分。
+    比例不合法或按当前比例划分后有空集合时，会给出明确错误。
     """
+    if not (
+        0 < validation_fraction < 1
+        and 0 < test_fraction < 1
+        and validation_fraction + test_fraction < 1
+    ):
+        raise ValueError("验证集和测试集比例都必须在 0–1 之间，且两者之和小于 1。")
+
     # 使用局部随机数生成器打乱 block 索引，不打乱块内试次。
     rng = np.random.default_rng(seed)
     # 计算各子集的 block 数量，按索引提取并返回三个列表。
@@ -32,6 +40,12 @@ def split_blocks(
     n_validation = int(n_blocks * validation_fraction)
     n_test = int(n_blocks * test_fraction)
     n_train = n_blocks - n_validation - n_test
+    if min(n_train, n_validation, n_test) == 0:
+        raise ValueError(
+            f"当前 {n_blocks} 个 block 按所设比例划分后，"
+            f"训练/验证/测试数量为 {n_train}/{n_validation}/{n_test}，存在空集合。"
+            "请增加完整 block 数量，或调整验证集和测试集比例。"
+        )
 
     indices = np.arange(n_blocks)
     rng.shuffle(indices)
@@ -98,12 +112,27 @@ def fit_gru(
     learning_rate: float = 0.005,
     max_epochs: int = 1000,
     patience: int = 100,
-) -> None:
+) -> dict:
     """拟合 GRU 参数，并将验证损失最小的参数恢复到 model。
 
     learning_rate 控制优化器如何调整参数，与 RW 中的 alpha 含义不同。
     一轮训练使用全部训练 block，汇总它们的预测损失后更新一次参数。
+
+    max_epochs 和 patience 必须为正整数，训练集与验证集都不能为空。
+    返回训练记录字典：
+        epoch: 从 1 开始的实际训练轮次列表。
+        train_nll: 每轮参数更新前的训练集平均负对数似然。
+        validation_nll: 每轮参数更新后的验证集平均负对数似然。
+        best_epoch: 验证损失最小时对应的轮次，从 1 开始。
+    两条损失曲线的计算时点不同；返回后 model 使用 best_epoch 的参数。
     """
+    if isinstance(max_epochs, bool) or not isinstance(max_epochs, int) or max_epochs <= 0:
+        raise ValueError("max_epochs 必须是正整数。")
+    if isinstance(patience, bool) or not isinstance(patience, int) or patience <= 0:
+        raise ValueError("patience 必须是正整数。")
+    if not train_blocks or not validation_blocks:
+        raise ValueError("训练集和验证集都不能为空，请检查完整 block 的划分结果。")
+
     # 把训练 block 整理为 inputs (T, B, 2) 和 targets (T, B)。
     # inputs 的 dtype 和 device 与模型参数一致，targets 使用 torch.long 且在同一设备。
     # targets 存放整数动作编号；保留块内时间顺序，验证数据也按相同方式整理。
@@ -134,6 +163,12 @@ def fit_gru(
     best_validation_loss = float("inf")
     best_state = None
     epochs_without_improvement = 0
+    history = {
+        "epoch": [],
+        "train_nll": [],
+        "validation_nll": [],
+        "best_epoch": 0,
+    }
     # 每轮进入训练模式，清除旧梯度，调用 model(inputs) 得到 logits。
     # 将 logits 整理为 (T*B, 2)，targets 整理为 (T*B,)，计算平均交叉熵。
     # 不要使用返回 NumPy 的 predict_block 来训练，也不要先对 logits 做 softmax。
@@ -153,9 +188,14 @@ def fit_gru(
             validation_loss = criterion(
                 validation_logits.reshape(-1, 2), validation_targets.reshape(-1)
             ).item()
+        # 保存标量，不保留计算图；提前停止的最后一轮也记录在内。
+        history["epoch"].append(epoch + 1)
+        history["train_nll"].append(loss.item())
+        history["validation_nll"].append(validation_loss)
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
             best_state = copy.deepcopy(model.state_dict())
+            history["best_epoch"] = epoch + 1
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
@@ -165,3 +205,4 @@ def fit_gru(
     # 测试集只在 main.py 的最终评估时使用。
     if best_state is not None:
         model.load_state_dict(best_state)
+    return history
