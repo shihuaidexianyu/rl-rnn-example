@@ -13,7 +13,15 @@ uv run rl-rnn-example
 uv run --group notebook jupyter lab doc/reversal_learning.ipynb
 ```
 
-从上到下运行即可读取数据、查看模型核心计算、评价预测并绘制整个测试集的动力学，插图均为 SVG。默认读取已有权重；将 Notebook 开头的 `FIT_MODELS` 改为 `True` 可重新拟合，结果独立保存到 `results/notebook/`。
+Notebook 包含完整的数据读取、模型、训练、评价和绘图代码，可单独作为教材配套资料使用。准备好 `.mat` 数据并设置 `DATA_DIR` 后，从上到下运行即可从零拟合两种模型，生成全部 SVG 插图；无需项目中的其他 Python 文件、已有权重或配图。结果写入 `reversal_learning_results/`。
+
+将 Notebook 单独放到新目录时，可按文件开头的说明创建环境：
+
+```bash
+uv venv --python 3.13
+uv pip install numpy scipy matplotlib torch jupyterlab ipykernel
+uv run jupyter lab reversal_learning.ipynb
+```
 
 配置直接修改 `src/rl_rnn_example/main.py`。当前 `FIT_MODELS=False`，读取已有权重重画；首次运行没有结果文件时，先改为 `True` 拟合一次。默认使用猴子 V，每个完整 block 保留原始第 11–70 次，按整 block 固定划分训练、验证和测试集。
 

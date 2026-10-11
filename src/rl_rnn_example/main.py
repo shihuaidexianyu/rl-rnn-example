@@ -53,7 +53,7 @@ PATIENCE = 100
 
 # True：拟合并保存结果；False：读取已有结果，直接重新画图。
 # 同一输出目录再次拟合会更新该目录中的模型、数据和图片。
-FIT_MODELS = False
+FIT_MODELS = True
 OUTPUT_DIR = PROJECT_DIR / "results" / f"monkey_{ANIMAL_NAME}_seed{SEED}"
 
 # 主图汇总全部测试 block，不由下面的单个 block 编号决定。

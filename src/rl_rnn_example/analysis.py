@@ -40,15 +40,7 @@ def summarize_model_comparison(records: list[dict]) -> dict:
     准确率衡量是否预测到猴子的选择，不是是否选中了高奖励概率选项。
     一次固定划分的结果不能代替跨划分检验，也不代表所有经典模型的表现。
     """
-    if not records:
-        raise ValueError("模型比较至少需要一个测试 block。")
-    animals = {record["animal_name"] for record in records}
-    if len(animals) != 1:
-        raise ValueError("一次模型比较只使用同一只猴子的测试记录。")
-
     actions = np.concatenate([record["actions"] for record in records])
-    if len(actions) == 0:
-        raise ValueError("测试记录中至少需要一次试次。")
     comparison = {
         "animal_name": records[0]["animal_name"],
         "n_blocks": len(records),
@@ -60,8 +52,6 @@ def summarize_model_comparison(records: list[dict]) -> dict:
         block_probabilities = []
         for record in records:
             probabilities = np.asarray(record["models"][model_name]["probabilities"])
-            if probabilities.shape != (len(record["actions"]), 2):
-                raise ValueError("每次真实选择必须对应两个动作的预测概率。")
             block_probabilities.append(probabilities)
         # 拼接的是已经算好的预测，不会把一个 block 的记忆带入下一个 block。
         probabilities = np.concatenate(block_probabilities)
@@ -97,15 +87,9 @@ def compute_one_step(
     observed_action = int(record["actions"][trial_index])
     observed_reward = int(record["rewards"][trial_index])
 
-    if (action is None) != (reward is None):
-        raise ValueError("动作和奖励必须一起指定，或一起省略以使用实际输入。")
     if action is None:
         action = observed_action
         reward = observed_reward
-    if action not in (0, 1) or reward not in (0, 1):
-        raise ValueError("动作和奖励只接受 0、1 编码。")
-    if initial_states is not None and set(initial_states) != set(models):
-        raise ValueError("手动探查时，请为每个模型分别提供一个初始状态。")
 
     source = {
         "animal_name": record["animal_name"],
@@ -132,8 +116,6 @@ def compute_one_step(
         else:
             before = initial_states[model_name]
         before = np.array(before, dtype=float, copy=True)
-        if before.shape != (2,) or not np.isfinite(before).all():
-            raise ValueError("一步示意图需要每个模型提供两个有限数值组成的状态。")
 
         # 直接从当前状态读取这次输入；不要调用会从零重置的 predict_block。
         after = model.update_state(before, int(action), int(reward))
@@ -261,13 +243,11 @@ def get_readout(model) -> tuple[np.ndarray, float]:
     if isinstance(model, RWModel):
         weights = np.array([model.iTemp, -model.iTemp], dtype=float)
         bias = 0.0
-    elif isinstance(model, GRUModel):
+    else:
         weights = model.linear.weight.detach().cpu().numpy()
         biases = model.linear.bias.detach().cpu().numpy()
         weights = np.asarray(weights[0] - weights[1], dtype=float)
         bias = float(biases[0] - biases[1])
-    else:
-        raise TypeError("读出分析只支持本项目的 RWModel 和 GRUModel。")
     return weights, bias
 
 
@@ -290,15 +270,7 @@ def compute_vector_field(
     网格点不表示猴子实际访问过的位置；模型状态也不等于记录到的神经活动。
     """
     states = np.asarray(states, dtype=float)
-    if states.ndim != 2 or states.shape[1] != 2 or len(states) < 2:
-        raise ValueError("动力学图需要形状为 (T+1, 2) 的二维状态序列。")
-    if not np.isfinite(states).all():
-        raise ValueError("状态中不能包含非有限数值。")
-    if not isinstance(grid_size, (int, np.integer)) or grid_size < 2:
-        raise ValueError("网格每个方向至少需要 2 个点。")
     readout_vector, readout_bias = get_readout(model)
-    if readout_vector.shape != (2,):
-        raise ValueError("二维动力学图只支持具有两个内部状态的模型。")
 
     has_observed_events = actions is not None and rewards is not None
     if (actions is None) != (rewards is None):
@@ -306,11 +278,6 @@ def compute_vector_field(
     if has_observed_events:
         actions = np.asarray(actions)
         rewards = np.asarray(rewards)
-        expected_shape = (len(states) - 1,)
-        if actions.shape != expected_shape or rewards.shape != expected_shape:
-            raise ValueError("T 次动作和奖励必须对应 T+1 个状态。")
-        if not np.isin(actions, [0, 1]).all() or not np.isin(rewards, [0, 1]).all():
-            raise ValueError("动作和奖励只接受 0、1 编码。")
         observed_changes = states[1:] - states[:-1]
 
     # 各方向留一点边距；几乎不变的状态也应有足够的可视范围。
@@ -396,14 +363,6 @@ def compute_model_dynamics(
     箭头过多时只抽样显示，背景、等值线和读出方向仍使用完整模型计算。
     max_arrows_per_condition=None 表示显示全部箭头；固定种子便于重复绘图。
     """
-    if not records:
-        raise ValueError("汇总动力学至少需要一个 block。")
-    animals = {record["animal_name"] for record in records}
-    if len(animals) != 1:
-        raise ValueError("同一张模型动力学图只汇总同一只猴子的 block。")
-    if max_arrows_per_condition is not None and max_arrows_per_condition < 1:
-        raise ValueError("每种条件的箭头上限应为正整数，或用 None 显示全部。")
-
     all_states = []
     update_starts = []
     update_changes = []
@@ -416,8 +375,6 @@ def compute_model_dynamics(
         final_state = np.asarray(prediction["final_state"], dtype=float)
         actions = np.asarray(record["actions"])
         rewards = np.asarray(record["rewards"])
-        if states.shape != (len(actions), 2) or rewards.shape != actions.shape:
-            raise ValueError("每个 block 的二维状态、动作和奖励需要逐次对应。")
 
         # 预测时每个 block 都独立从零状态开始，这里读取其保存的完整轨迹。
         # 先在各 block 内计算差分，绝不能先拼接轨迹再求差：那会把前一个

@@ -18,3 +18,4 @@ data/
 
 # 本机生成的模型、预测和图片
 results/
+reversal_learning_results/
