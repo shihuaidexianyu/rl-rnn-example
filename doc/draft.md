@@ -14,7 +14,7 @@
 
 任务包含两类 block。在 **what block** 中，奖励概率与图像身份有关，图像的左右位置逐试次变化；在 **where block** 中，奖励概率与左右位置有关。整理数据时，前者使用图像选择，后者使用位置选择，将相关的两个选项统一编码为动作 0 和动作 1。奖励编码为 1，无奖励编码为 0。因此，动作 0 并不总是指屏幕左侧。
 
-![反转学习的单试次流程与奖励概率反转](/Users/hongweiqin/Desktop/rl-rnn-example/doc/figures/reversal_task.svg)
+![反转学习的单试次流程与奖励概率反转](figures/reversal_task.svg)
 
 **图 10.2.4-1｜反转学习任务。** a，单次试次的呈现、选择与反馈；几何图形代指两幅刺激图像，虚线圈标出所选项。动物只获得所选项的反馈。b，一个完整 block 包含 80 次试次，两个选项的奖励概率在中部无提示地互换一次。图中初始高低概率的归属及反转位置均为示意。what block 的选项按图像编码，where block 按位置编码。
 
@@ -101,7 +101,7 @@ class RWModel:
 
 循环中，预测发生在价值更新之前。减去最大价值是 softmax 的数值稳定处理，不改变选择概率。`states` 保存反馈前的价值，`final_state` 另存最后一次反馈后的价值，二者一起构成后续动力学分析所需的完整状态轨迹。
 
-![RW 的价值更新与选择读出](/Users/hongweiqin/Desktop/rl-rnn-example/doc/figures/rw_architecture.svg)
+![RW 的价值更新与选择读出](figures/rw_architecture.svg)
 
 **图 10.2.4-2｜RW 模型。** 当前价值状态 $\mathbf Q_t$ 经 softmax 产生选择概率 $\mathbf p_t$。观察到真实动作 $a_t$ 与奖励 $r_t$ 后，模型按预测误差更新被选动作的价值，未选动作的价值保持不变，得到 $\mathbf Q_{t+1}$。
 
@@ -158,7 +158,7 @@ $$
 
 更新门的某个分量接近 1 时，对应维度更多保留旧状态；接近 0 时，更多采用候选状态。两个门都会随当前输入和历史状态改变，因此同一种无奖励反馈可以产生不同的状态更新。
 
-![GRU 的时间结构、重置门、更新门与候选状态计算](/Users/hongweiqin/Desktop/rl-rnn-example/doc/figures/gru_architecture.svg)
+![GRU 的时间结构、重置门、更新门与候选状态计算](figures/gru_architecture.svg)
 
 **图 10.2.4-3｜GRU 的时间结构与内部计算。** a，同一组参数 $\theta$ 在各试次重复使用，当前预测 $\mathbf p_t$ 从 $\mathbf h_t$ 读出，本次输入 $\mathbf x_t=(a_t,r_t)^\mathsf T$ 用于更新下一状态。b，两个门的方框直接列出矩阵运算，括号内上下排列的 $\mathbf x_t$ 与 $\mathbf h_t$ 表示向量拼接。门的两部分权重并列、两项偏置相加，仅为书写简便。重置门调节旧状态变换后的贡献，更新门控制旧状态与候选状态的混合。$\odot$ 表示逐元素乘，圆圈中的加号表示逐元素加；隐藏状态及两个门均为二维向量。
 
@@ -272,7 +272,7 @@ for name, model in models.items():
     print(name, scores["nll"], scores["accuracy"])
 ```
 
-![RW 与 GRU 在相同测试集上的预测表现](/Users/hongweiqin/Desktop/rl-rnn-example/doc/figures/model_comparison.svg)
+![RW 与 GRU 在相同测试集上的预测表现](figures/model_comparison.svg)
 
 **图 10.2.4-4｜测试集上的选择预测。** a，每试次平均 NLL，越低越好。b，选择预测准确率，越高越好。两个模型均评价猴子 V 的同一组 9 个测试 block，共 540 次试次。图中为一次固定数据划分的描述性结果，未作统计推断。
 
@@ -316,9 +316,15 @@ plot_dynamics_comparison(fields, Path("results/chapter_figures"))
 
 函数先在每个 block 内计算状态更新，再按输入条件汇总。它不会把前一个 block 的末状态与下一个 block 的初状态连接起来。每个 block 的最后一次反馈也有更新后的末状态，因此 9 个 block 的 540 次反馈都能进入分析。
 
-![RW 与 GRU 在整个测试集上的条件状态动力学](/Users/hongweiqin/Desktop/rl-rnn-example/doc/figures/dynamics_comparison.svg)
+![选择 0 无奖励时的状态更新](figures/dynamics_a0r0.svg)
 
-**图 10.2.4-5｜整个测试集的条件动力学。** 上排 a–d 为 RW，下排 e–h 为 GRU；四列依次为选择 0 无奖励、选择 0 有奖励、选择 1 无奖励、选择 1 有奖励。黑箭头表示真实行为驱动的模型状态更新，四列分别包含 101、188、116、135 次事件；每个模型共显示 540 次更新。背景色及细等值线表示在网格状态上施加该列输入时的更新幅度 $\|\Delta\mathbf s\|_2$。同一模型四个面板共用色标，两种模型的色标独立。橙色虚线为 $P(a=0)=0.5$ 的边界。图中包含全部 9 个测试 block，而非单个 block 的轨迹。
+![选择 0 有奖励时的状态更新](figures/dynamics_a0r1.svg)
+
+![选择 1 无奖励时的状态更新](figures/dynamics_a1r0.svg)
+
+![选择 1 有奖励时的状态更新](figures/dynamics_a1r1.svg)
+
+**图 10.2.4-5｜整个测试集的条件动力学。** 每张图对应一种动作与奖励组合（依次为选择 0 无奖励、选择 0 有奖励、选择 1 无奖励、选择 1 有奖励），上为 RW、下为 GRU。黑箭头表示真实行为驱动的模型状态更新，四种条件分别包含 101、188、116、135 次事件；每个模型共显示 540 次更新。背景色及细等值线表示在网格状态上施加该条件输入时的更新幅度 $\|\Delta\mathbf s\|_2$。两种模型的状态坐标单位不同，各自独立标色。橙色虚线为 $P(a=0)=0.5$ 的边界。图中包含全部 9 个测试 block，而非单个 block 的轨迹。
 
 阅读这张图时，可以依次区分三类信息。
 
