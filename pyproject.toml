@@ -17,3 +17,11 @@ rl-rnn-example = "rl_rnn_example.main:main"
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+notebook = [
+    "ipykernel>=7.4.0",
+    "jupyterlab>=4.6.4",
+    "nbclient>=0.11.0",
+    "nbformat>=5.11.1",
+]

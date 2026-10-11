@@ -874,16 +874,17 @@ def plot_dynamics_comparison(fields: dict, output_dir: str | Path) -> None:
                 row_axes.append(axis)
                 condition = conditions[event]
                 speed = np.asarray(condition["speed"])
-                # 平滑填色，避免大量色阶边缘被误读成额外的等值线。
-                background = axis.pcolormesh(
+                # 用 256 个细色阶近似连续填色，保留纯矢量且避免大量 SVG 渐变。
+                # 数值网格和色标范围不变；关闭色阶边缘抗锯齿，避免可见白缝。
+                background = axis.contourf(
                     grid_x,
                     grid_y,
                     speed,
-                    shading="gouraud",
+                    levels=np.linspace(0, color_max, 257),
                     cmap=pale_colormap,
                     vmin=0,
                     vmax=color_max,
-                    rasterized=False,
+                    antialiased=False,
                 )
                 # 细线连接更新幅度相同的起点；它们不是连续的状态轨迹。
                 visible_levels = contour_levels[

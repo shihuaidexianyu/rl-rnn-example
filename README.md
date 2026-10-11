@@ -7,6 +7,14 @@ uv sync --locked
 uv run rl-rnn-example
 ```
 
+统一的交互实验见 [doc/reversal_learning.ipynb](doc/reversal_learning.ipynb)：
+
+```bash
+uv run --group notebook jupyter lab doc/reversal_learning.ipynb
+```
+
+从上到下运行即可读取数据、查看模型核心计算、评价预测并绘制整个测试集的动力学，插图均为 SVG。默认读取已有权重；将 Notebook 开头的 `FIT_MODELS` 改为 `True` 可重新拟合，结果独立保存到 `results/notebook/`。
+
 配置直接修改 `src/rl_rnn_example/main.py`。当前 `FIT_MODELS=False`，读取已有权重重画；首次运行没有结果文件时，先改为 `True` 拟合一次。默认使用猴子 V，每个完整 block 保留原始第 11–70 次，按整 block 固定划分训练、验证和测试集。
 
 默认结果目录为 `results/monkey_V_seed0/`：
