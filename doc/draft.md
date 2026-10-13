@@ -4,23 +4,23 @@
 
 上一节利用神经网络研究价值函数与概率权重函数的形状。本节进一步关注一个随时间展开的问题：**经历一次选择及其结果后，个体如何改变内部状态，并据此作出下一次选择？** 我们将以猴子的反转学习任务为例，先比较经典模型与小型循环神经网络的预测，再分析它们如何响应相同的反馈。
 
-这一思路借鉴了 Ji-An 等[15]的 tiny RNN 研究。该研究使用只有少量循环单元的网络拟合选择行为，并通过低维状态动力学研究候选学习策略。本节用自行实现的 RW 与两隐藏单元 GRU 展示这一方法：预测比较回答模型是否更好地描述了行为，动力学分析则进一步考察这种描述由怎样的状态更新产生。
+这一思路借鉴了 Ji-An 等<sup>15</sup>的 tiny RNN 研究。该研究使用只有少量循环单元的网络拟合选择行为，并通过低维状态动力学研究候选学习策略。本节用自行实现的 RW 与两隐藏单元 GRU 展示这一方法：预测比较回答模型是否更好地描述了行为，动力学分析则进一步考察这种描述由怎样的状态更新产生。
 
 # 从反转学习任务开始
 
 设想你经常光顾两家餐厅，起初其中一家更容易提供满意的食物，后来两家的质量发生了变化。你需要根据新的用餐经历调整偏好，但一次不满意的经历未必足以说明这家餐厅已经变差。反转学习任务将类似的问题放进受控实验，用来研究个体如何在保留过去经验和响应新反馈之间取得平衡。
 
-在本案例所用实验中，猴子每次在两个选项之间作出选择，随后获得奖励或没有获得奖励。一个选项的奖励概率为 0.7，另一个为 0.3；每个完整实验块（block）包含 80 次试次，其中发生一次无提示的概率反转，两个选项的奖励概率互换。原实验将反转安排在 block 中部的随机试次，具体位置不固定，也不取决于猴子当时的表现[16]。
+在本案例所用实验中，猴子每次在两个选项之间作出选择，随后获得奖励或没有获得奖励。一个选项的奖励概率为 0.7，另一个为 0.3；每个完整实验块（block）包含 80 次试次，其中发生一次无提示的概率反转，两个选项的奖励概率互换。原实验将反转安排在 block 中部的随机试次，具体位置不固定，也不取决于猴子当时的表现<sup>16</sup>。
 
 任务包含两类 block。在 **what block** 中，奖励概率与图像身份有关，图像的左右位置逐试次变化；在 **where block** 中，奖励概率与左右位置有关。整理数据时，前者使用图像选择，后者使用位置选择，将相关的两个选项统一编码为动作 0 和动作 1。奖励编码为 1，无奖励编码为 0。因此，动作 0 并不总是指屏幕左侧。
 
-![反转学习的单试次流程与奖励概率反转](figures/reversal_task.svg)
+<img src="figures/reversal_task.svg" alt="反转学习的单试次流程与奖励概率反转" style="zoom:200%;" />
 
 **图 10.2.4-1｜反转学习任务。** a，单次试次的呈现、选择与反馈；几何图形代指两幅刺激图像，虚线圈标出所选项。动物只获得所选项的反馈。b，一个完整 block 包含 80 次试次，两个选项的奖励概率在中部无提示地互换一次。图中初始高低概率的归属及反转位置均为示意。what block 的选项按图像编码，where block 按位置编码。
 
 由于奖励具有概率性，选择高奖励概率的选项也可能没有获得奖励。因此，一次无奖励并不能直接说明规则已经反转。模型需要利用此前的选择与反馈预测行为，这为比较不同的历史整合方式提供了研究场景。我们要预测的是猴子实际会选什么，而不是判断哪个选项在实验规则下更优。
 
-本例只使用公开数据集[17]中的行为矩阵 `Y`，不使用神经记录。一次 session 对应一个数据文件，一个 session 中有多个 block；`session_name` 与 `block_order` 共同标识一条独立序列。
+本例只使用公开数据集<sup>17</sup>中的行为矩阵 `Y`，不使用神经记录。一次 session 对应一个数据文件，一个 session 中有多个 block；`session_name` 与 `block_order` 共同标识一条独立序列。
 
 完整实验见配套文件 `reversal_learning.ipynb`。请按文件开头的说明安装依赖，将另行下载的原始 `.mat` 数据放在 notebook 同级的 `data` 文件夹，并在 Jupyter 中依次运行。下文展开模型和训练的关键步骤；数据读取、记录整理和绘图辅助函数使用附件中的定义。
 
@@ -59,7 +59,13 @@ block 数： 96
 
 # 用 RW 模型建立参照
 
-我们先采用具有两个动作价值的 RW 型模型。令 $Q_t(a)$ 表示第 $t$ 次选择之前，模型对动作 $a$ 的价值估计。模型通过 softmax 将价值转换为选择概率：
+我们先采用具有两个动作价值的 RW 型模型。令 $Q_t(a)$ 表示第 $t$ 次选择之前，模型对动作 $a$ 的价值估计。把两个动作的价值拼成向量 $\mathbf Q_t=(Q_t(0),\,Q_t(1))$，模型通过 softmax 将价值转换为选择概率：
+
+$$
+\mathbf p_t=\operatorname{softmax}(\beta\mathbf Q_t)
+$$
+
+逐动作展开，就是
 
 $$
 p_t(a)=\frac{\exp[\beta Q_t(a)]}{\exp[\beta Q_t(0)]+\exp[\beta Q_t(1)]}
@@ -179,7 +185,7 @@ $$
 
 更新门的某个分量接近 1 时，对应维度更多保留旧状态；接近 0 时，更多采用候选状态。两个门都会随当前输入和历史状态改变，因此同一种无奖励反馈可以产生不同的状态更新。
 
-![GRU 的时间结构、重置门、更新门与候选状态计算](figures/gru_architecture.svg)
+<img src="figures/gru_architecture.svg" alt="GRU 的时间结构、重置门、更新门与候选状态计算" style="zoom:150%;" />
 
 **图 10.2.4-3｜GRU 的时间结构与内部计算。** a，同一组参数 $\theta$ 在各试次重复使用，当前预测 $\mathbf p_t$ 从 $\mathbf h_t$ 读出，本次输入 $\mathbf x_t=(a_t,r_t)^\mathsf T$ 用于更新下一状态。b，两个门的方框直接列出矩阵运算，括号内上下排列的 $\mathbf x_t$ 与 $\mathbf h_t$ 表示向量拼接。门的两部分权重并列、两项偏置相加，仅为书写简便。重置门调节旧状态变换后的贡献，更新门控制旧状态与候选状态的混合。$\odot$ 表示逐元素乘，圆圈中的加号表示逐元素加；隐藏状态及两个门均为二维向量。
 
@@ -427,7 +433,7 @@ plot_model_comparison(comparison, FIGURE_DIR)
 show_svg(FIGURE_DIR / "model_comparison.svg")
 ```
 
-![RW 与 GRU 在相同测试集上的预测表现](figures/model_comparison.svg)
+<img src="figures/model_comparison.svg" alt="RW 与 GRU 在相同测试集上的预测表现" style="zoom:150%;" />
 
 **图 10.2.4-4｜测试集上的选择预测。** a，每试次平均 NLL，越低越好。b，选择预测准确率，越高越好。两个模型均评价猴子 V 的同一组 9 个测试 block，共 540 次试次。图中为一次固定数据划分的描述性结果，未作统计推断。
 
@@ -519,4 +525,6 @@ $$
 
 # 参考文献
 
-本节参考文献统一列于第十章 [Appendix](appendix.md)，编号为 15–17。
+15. Ji-An, L., Benna, M. K. & Mattar, M. G. Discovering cognitive strategies with tiny recurrent neural networks. *Nature* **644**, 993–1001 (2025). [doi:10.1038/s41586-025-09142-4](https://doi.org/10.1038/s41586-025-09142-4)
+16. Bartolo, R., Saunders, R. C., Mitz, A. R. & Averbeck, B. B. Dimensionality, information and learning in prefrontal cortex. *PLOS Computational Biology* **16**, e1007514 (2020). [doi:10.1371/journal.pcbi.1007514](https://doi.org/10.1371/journal.pcbi.1007514)
+17. Bartolo, R. & Averbeck, B. Spike count data for studying dimensionality, information and learning in prefrontal cortex [Data set, Version 1]. *Mendeley Data* [doi:10.17632/p7ft2bvphx.1](https://doi.org/10.17632/p7ft2bvphx.1) (2022).
